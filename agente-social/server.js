@@ -5,7 +5,8 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const { estado, guardar, id } = require('./store');
+const store = require('./store');
+const { estado, guardar, id } = store;
 const ia = require('./ia');
 const adapters = require('./adapters');
 const scheduler = require('./scheduler');
@@ -518,10 +519,13 @@ const server = http.createServer(async (req, res) => {
   servirEstatico(req, res);
 });
 
-server.listen(PORT, () => {
-  console.log('====================================================');
-  console.log('  AGENTE SOCIAL en http://localhost:' + PORT);
-  console.log('  IA con Claude: ' + (ia.hayClave ? 'ACTIVA (' + ia.MODELO + ')' : 'MODO DEMO (define ANTHROPIC_API_KEY)'));
-  console.log('====================================================');
-  scheduler.iniciar();
+store.iniciar().then(() => {
+  server.listen(PORT, () => {
+    console.log('====================================================');
+    console.log('  AGENTE SOCIAL en http://localhost:' + PORT);
+    console.log('  IA con Claude: ' + (ia.hayClave ? 'ACTIVA (' + ia.MODELO + ')' : 'MODO DEMO (define ANTHROPIC_API_KEY)'));
+    console.log('  Datos: ' + store.modo);
+    console.log('====================================================');
+    scheduler.iniciar();
+  });
 });
