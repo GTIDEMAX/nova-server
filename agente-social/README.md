@@ -10,6 +10,10 @@ Agente con IA para llevar las redes sociales, WhatsApp y la atención al cliente
 - **Atención al cliente**: cuando llega un mensaje (WhatsApp, Instagram, etc.), la IA redacta un borrador de respuesta que apruebas antes de enviar.
 - **Adaptadores por plataforma**: la estructura está lista para conectar tus cuentas reales; mientras tanto todo funciona en **modo simulado** para que pruebes el flujo completo.
 
+## 🚀 Desplegar en internet
+
+Para usarlo desde el celular con un link, que funcione 24/7 y conectar WhatsApp/web reales, hay que desplegarlo. Guía paso a paso en **[DESPLIEGUE.md](DESPLIEGUE.md)** (usa Render, con plan gratis). El repo ya incluye `render.yaml` para que sea casi automático.
+
 ## Cómo arrancarlo
 
 ```bash

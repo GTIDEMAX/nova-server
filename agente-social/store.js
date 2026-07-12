@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_FILE = path.join(__dirname, 'data.json');
+// Ubicacion del archivo de datos. Configurable con DATA_FILE para poder
+// apuntar a un disco persistente al desplegar (ej. /var/data/data.json).
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 
 const ESTADO_INICIAL = {
   empresas: [],
