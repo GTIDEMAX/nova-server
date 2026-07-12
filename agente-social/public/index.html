@@ -287,6 +287,17 @@ function tarjetaPublicacion(p) {
   };
   acc.appendChild(bFoto); acc.appendChild(inpFoto);
 
+  // Traer imagen desde un enlace (de su página o internet)
+  const bLink = el('<button class="btn sec mini">🔗 Traer de un enlace</button>');
+  bLink.onclick = async () => {
+    const u = prompt('Pega el enlace (URL) de la imagen — de tu página o de internet:');
+    if (!u) return;
+    bLink.disabled = true; bLink.textContent = '🔗 Trayendo…';
+    try { await api('/api/publicaciones/'+p.id+'/imagen-url',{method:'POST',body:JSON.stringify({url:u.trim()})}); toast('Imagen lista ✅'); cargar(); }
+    catch(e){ toast(e.message); bLink.disabled=false; bLink.textContent='🔗 Traer de un enlace'; }
+  };
+  acc.appendChild(bLink);
+
   if (S.imagenActiva) {
     const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenUrl?'Regenerar':'Generar')+' imagen IA</button>');
     bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };

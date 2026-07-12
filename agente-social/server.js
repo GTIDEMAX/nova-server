@@ -216,6 +216,31 @@ async function manejarAPI(req, res, ruta) {
       guardar();
       return enviarJSON(res, 200, { publicacion: pub });
     }
+    // Traer una imagen desde un enlace (de su pagina o de internet)
+    if (partes[3] === 'imagen-url' && req.method === 'POST') {
+      const url = (body.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) return enviarJSON(res, 400, { error: 'Enlace no valido (debe empezar con http)' });
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('No se pudo descargar (HTTP ' + r.status + ')');
+        const ct = r.headers.get('content-type') || '';
+        const m = ct.match(/image\/(png|jpe?g|webp|gif)/i);
+        if (!m) throw new Error('El enlace no es una imagen directa (debe terminar en .jpg, .png, etc.)');
+        const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+        const buffer = Buffer.from(await r.arrayBuffer());
+        if (buffer.length > 10 * 1024 * 1024) throw new Error('La imagen es muy grande (max 10 MB)');
+        const dir = path.join(PUBLIC_DIR, 'uploads');
+        try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+        const nombre = pub.id + '-' + Date.now().toString(36) + '.' + ext;
+        fs.writeFileSync(path.join(dir, nombre), buffer);
+        pub.imagenUrl = '/uploads/' + nombre;
+        pub.imagenIA = false;
+        guardar();
+        return enviarJSON(res, 200, { publicacion: pub });
+      } catch (e) {
+        return enviarJSON(res, 400, { error: 'No se pudo traer la imagen: ' + e.message });
+      }
+    }
     // (Re)generar imagen con IA para esta publicacion
     if (partes[3] === 'imagen' && req.method === 'POST') {
       if (!imagen.hayImagen) return enviarJSON(res, 400, { error: 'Falta IMAGE_API_KEY para generar imagenes con IA' });
