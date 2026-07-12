@@ -270,6 +270,23 @@ function tarjetaPublicacion(p) {
   bGuardar.onclick = async () => { await guardarTexto(); toast('Guardado'); };
   acc.appendChild(bGuardar);
 
+  // Subir foto desde el celular (cámara o galería)
+  const inpFoto = el('<input type="file" accept="image/*" capture="environment" style="display:none">');
+  const bFoto = el('<button class="btn sec mini">📷 Subir foto</button>');
+  bFoto.onclick = () => inpFoto.click();
+  inpFoto.onchange = () => {
+    const f = inpFoto.files[0]; if (!f) return;
+    if (f.size > 10*1024*1024) return toast('Foto muy grande (máx 10MB)');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      bFoto.disabled = true; bFoto.textContent = '📷 Subiendo…';
+      try { await api('/api/publicaciones/'+p.id+'/foto',{method:'POST',body:JSON.stringify({data:reader.result})}); toast('Foto subida ✅'); cargar(); }
+      catch(e){ toast('Error: '+e.message); bFoto.disabled=false; bFoto.textContent='📷 Subir foto'; }
+    };
+    reader.readAsDataURL(f);
+  };
+  acc.appendChild(bFoto); acc.appendChild(inpFoto);
+
   if (S.imagenActiva) {
     const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenUrl?'Regenerar':'Generar')+' imagen IA</button>');
     bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };

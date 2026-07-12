@@ -199,6 +199,23 @@ async function manejarAPI(req, res, ruta) {
       guardar();
       return enviarJSON(res, 200, pub);
     }
+    // Subir una foto (desde camara/galeria del celular) para esta publicacion
+    if (partes[3] === 'foto' && req.method === 'POST') {
+      const data = body.data || '';
+      const m = data.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
+      if (!m) return enviarJSON(res, 400, { error: 'Formato de imagen no valido (usa JPG, PNG o WEBP)' });
+      const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+      const buffer = Buffer.from(m[2], 'base64');
+      if (buffer.length > 10 * 1024 * 1024) return enviarJSON(res, 400, { error: 'La foto es muy grande (max 10 MB)' });
+      const dir = path.join(PUBLIC_DIR, 'uploads');
+      try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+      const nombre = pub.id + '-' + Date.now().toString(36) + '.' + ext;
+      fs.writeFileSync(path.join(dir, nombre), buffer);
+      pub.imagenUrl = '/uploads/' + nombre;
+      pub.imagenIA = false;
+      guardar();
+      return enviarJSON(res, 200, { publicacion: pub });
+    }
     // (Re)generar imagen con IA para esta publicacion
     if (partes[3] === 'imagen' && req.method === 'POST') {
       if (!imagen.hayImagen) return enviarJSON(res, 400, { error: 'Falta IMAGE_API_KEY para generar imagenes con IA' });
