@@ -1,0 +1,12 @@
+{
+  "name": "agente-social",
+  "version": "1.0.0",
+  "description": "Agente con IA para gestionar redes sociales, WhatsApp y atencion al cliente de varias empresas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0"
+  }
+}

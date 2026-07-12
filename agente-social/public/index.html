@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agente Social · Panel</title>
+<style>
+  :root {
+    --bg: #0f1220; --panel: #181c2e; --panel2: #202542; --line: #2c3255;
+    --txt: #e8eaf5; --muted: #9aa0c0; --acc: #6d5efc; --acc2: #22c9a8;
+    --warn: #f5a524; --danger: #f43f5e; --ok: #22c9a8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--txt); }
+  header { padding: 18px 24px; background: linear-gradient(90deg,#181c2e,#1d2140); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  .logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg,var(--acc),var(--acc2)); display: grid; place-items: center; font-weight: 800; }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.on { color: var(--ok); border-color: var(--ok); }
+  .badge.off { color: var(--warn); border-color: var(--warn); }
+  nav { display: flex; gap: 6px; padding: 12px 24px 0; flex-wrap: wrap; }
+  nav button { background: transparent; border: none; color: var(--muted); padding: 10px 16px; border-radius: 10px 10px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; }
+  nav button.active { background: var(--panel); color: var(--txt); }
+  main { padding: 20px 24px 60px; max-width: 1100px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 14px; }
+  h3 { font-size: 14px; margin: 0 0 6px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--txt); border-radius: 9px; padding: 10px 12px; font-size: 14px; font-family: inherit; }
+  textarea { resize: vertical; min-height: 70px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 160px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .chip { font-size: 12px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; user-select: none; color: var(--muted); }
+  .chip.sel { background: var(--acc); border-color: var(--acc); color: #fff; }
+  button.btn { background: var(--acc); color: #fff; border: none; padding: 10px 16px; border-radius: 9px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 12px; }
+  button.btn.sec { background: var(--panel2); border: 1px solid var(--line); }
+  button.btn.ok { background: var(--ok); }
+  button.btn.warn { background: var(--warn); color: #201a00; }
+  button.btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+  button.btn.mini { padding: 6px 10px; font-size: 12px; margin: 0; }
+  .item { border: 1px solid var(--line); border-radius: 11px; padding: 14px; margin-bottom: 10px; background: var(--panel2); }
+  .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .tag { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #2a2f52; color: var(--muted); text-transform: capitalize; }
+  .estado { font-size: 11px; padding: 3px 9px; border-radius: 999px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+  .e-borrador { background: #33385e; color: #b9c0ee; }
+  .e-aprobado { background: #204a44; color: #7ff0d6; }
+  .e-programado { background: #4a3d1a; color: #ffd98a; }
+  .e-publicado { background: #1f3f66; color: #8fc4ff; }
+  .e-pendiente { background: #4a2130; color: #ffb3c4; }
+  .e-respondido { background: #204a44; color: #7ff0d6; }
+  .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .empty { text-align: center; color: var(--muted); padding: 30px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--acc); color: #fff; padding: 12px 20px; border-radius: 10px; opacity: 0; transition: .3s; pointer-events: none; z-index: 50; }
+  .toast.show { opacity: 1; }
+  .flex-b { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  small.hs { color: var(--acc2); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">AS</div>
+  <h1>Agente Social</h1>
+  <span id="iaBadge" class="badge">IA…</span>
+  <span class="badge" id="empBadge">0 empresas</span>
+</header>
+
+<nav>
+  <button data-tab="empresas" class="active">🏢 Empresas</button>
+  <button data-tab="contenido">✍️ Crear contenido</button>
+  <button data-tab="aprobaciones">📅 Publicaciones</button>
+  <button data-tab="atencion">💬 Atención al cliente</button>
+</nav>
+
+<main>
+  <section id="tab-empresas"></section>
+  <section id="tab-contenido" hidden></section>
+  <section id="tab-aprobaciones" hidden></section>
+  <section id="tab-atencion" hidden></section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const PLATAFORMAS = ['instagram','facebook','linkedin','tiktok','web','blog'];
+let S = { empresas: [], publicaciones: [], mensajes: [], iaActiva: false, modelo: '' };
+
+// ---------- helpers ----------
+const $ = (s, r=document) => r.querySelector(s);
+const el = (h) => { const d = document.createElement('div'); d.innerHTML = h.trim(); return d.firstChild; };
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2200); }
+async function api(url, opts) {
+  const r = await fetch(url, { headers: {'Content-Type':'application/json'}, ...opts });
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.error || 'Error');
+  return data;
+}
+function esc(s){ return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function nombreEmpresa(id){ const e = S.empresas.find(x=>x.id===id); return e ? e.nombre : '—'; }
+
+async function cargar() {
+  S = await api('/api/estado');
+  const b = $('#iaBadge');
+  b.textContent = S.iaActiva ? 'IA activa · '+S.modelo : 'Modo demo (sin ANTHROPIC_API_KEY)';
+  b.className = 'badge ' + (S.iaActiva ? 'on' : 'off');
+  $('#empBadge').textContent = S.empresas.length + ' empresa' + (S.empresas.length===1?'':'s');
+  render();
+}
+
+// ---------- tabs ----------
+let tab = 'empresas';
+document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
+  tab = btn.dataset.tab;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===btn));
+  ['empresas','contenido','aprobaciones','atencion'].forEach(t => $('#tab-'+t).hidden = t!==tab);
+  render();
+});
+
+function render() {
+  if (tab==='empresas') renderEmpresas();
+  if (tab==='contenido') renderContenido();
+  if (tab==='aprobaciones') renderAprobaciones();
+  if (tab==='atencion') renderAtencion();
+}
+
+// ---------- EMPRESAS ----------
+function renderEmpresas() {
+  const c = $('#tab-empresas');
+  c.innerHTML = '';
+  const form = el(`<div class="card">
+    <h2>Registrar empresa / marca</h2>
+    <div class="row">
+      <div><label>Nombre</label><input id="e-nombre" placeholder="Ej: Panadería La Espiga"></div>
+      <div><label>Rubro</label><input id="e-rubro" placeholder="Ej: alimentos, moda, servicios"></div>
+    </div>
+    <div class="row">
+      <div><label>Tono de comunicación</label><input id="e-tono" placeholder="cercano y profesional"></div>
+      <div><label>Público objetivo</label><input id="e-publico" placeholder="Ej: familias del barrio"></div>
+    </div>
+    <label>Plataformas que maneja</label>
+    <div class="chips" id="e-plats"></div>
+    <button class="btn" id="e-guardar">Guardar empresa</button>
+  </div>`);
+  c.appendChild(form);
+  const platsSel = new Set();
+  const cont = $('#e-plats', form);
+  PLATAFORMAS.forEach(p => {
+    const chip = el(`<span class="chip">${p}</span>`);
+    chip.onclick = () => { chip.classList.toggle('sel'); platsSel.has(p)?platsSel.delete(p):platsSel.add(p); };
+    cont.appendChild(chip);
+  });
+  $('#e-guardar', form).onclick = async () => {
+    const nombre = $('#e-nombre', form).value.trim();
+    if (!nombre) return toast('Pon un nombre');
+    await api('/api/empresas', { method:'POST', body: JSON.stringify({
+      nombre, rubro: $('#e-rubro',form).value, tono: $('#e-tono',form).value,
+      publico: $('#e-publico',form).value, plataformas: [...platsSel]
+    })});
+    toast('Empresa guardada'); cargar();
+  };
+
+  if (!S.empresas.length) { c.appendChild(el('<div class="empty">Aún no tienes empresas. Registra la primera arriba.</div>')); return; }
+  S.empresas.forEach(e => {
+    const item = el(`<div class="item">
+      <div class="top"><h3>${esc(e.nombre)}</h3><span class="tag">${esc(e.rubro||'sin rubro')}</span></div>
+      <div class="muted">Tono: ${esc(e.tono)} · Público: ${esc(e.publico||'—')}</div>
+      <div class="chips">${(e.plataformas||[]).map(p=>`<span class="chip sel">${p}</span>`).join('') || '<span class="muted">sin plataformas</span>'}</div>
+      <div class="acciones"><button class="btn danger mini">Eliminar</button></div>
+    </div>`);
+    $('.danger', item).onclick = async () => { if(confirm('¿Eliminar '+e.nombre+' y todo su contenido?')){ await api('/api/empresas/'+e.id,{method:'DELETE'}); cargar(); } };
+    c.appendChild(item);
+  });
+}
+
+// ---------- CREAR CONTENIDO ----------
+function renderContenido() {
+  const c = $('#tab-contenido'); c.innerHTML = '';
+  if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa en la pestaña Empresas.</div>')); return; }
+  const form = el(`<div class="card">
+    <h2>Generar contenido con IA</h2>
+    <div class="row">
+      <div><label>Empresa</label><select id="g-emp">${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
+      <div><label>Plataforma</label><select id="g-plat">${PLATAFORMAS.map(p=>`<option>${p}</option>`).join('')}</select></div>
+      <div><label>Cantidad</label><select id="g-cant"><option>3</option><option>1</option><option>2</option><option>4</option><option>5</option></select></div>
+    </div>
+    <label>Tema / idea (opcional)</label>
+    <textarea id="g-tema" placeholder="Ej: promoción de fin de semana 2x1, lanzamiento de producto nuevo, consejos útiles..."></textarea>
+    <button class="btn" id="g-go">✨ Generar borradores</button>
+    <div id="g-status" class="muted" style="margin-top:10px"></div>
+  </div>`);
+  c.appendChild(form);
+  $('#g-go', form).onclick = async () => {
+    const btn = $('#g-go', form); btn.disabled = true;
+    $('#g-status', form).textContent = 'Generando con IA… (puede tardar unos segundos)';
+    try {
+      const r = await api('/api/contenido/generar', { method:'POST', body: JSON.stringify({
+        empresaId: $('#g-emp',form).value, plataforma: $('#g-plat',form).value,
+        cantidad: $('#g-cant',form).value, tema: $('#g-tema',form).value })});
+      toast('Se crearon '+r.publicaciones.length+' borradores');
+      $('#g-status', form).textContent = 'Listo. Míralos en la pestaña Publicaciones para aprobar.';
+    } catch(e){ toast('Error: '+e.message); $('#g-status',form).textContent=''; }
+    btn.disabled = false;
+  };
+  // Muestra últimos borradores creados
+  const borradores = S.publicaciones.filter(p=>p.estado==='borrador').slice(-6).reverse();
+  if (borradores.length) {
+    c.appendChild(el('<h3 style="margin:6px 4px">Últimos borradores</h3>'));
+    borradores.forEach(p => c.appendChild(tarjetaPublicacion(p)));
+  }
+}
+
+// ---------- PUBLICACIONES / APROBACIONES ----------
+function tarjetaPublicacion(p) {
+  const item = el(`<div class="item">
+    <div class="top">
+      <div><span class="estado e-${p.estado}">${p.estado}</span> <span class="tag">${p.plataforma}</span> <span class="muted">${esc(nombreEmpresa(p.empresaId))}</span></div>
+    </div>
+    <textarea class="p-texto">${esc(p.texto)}</textarea>
+    <div class="chips">${(p.hashtags||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join('')}</div>
+    <div class="acciones"></div>
+    ${p.fechaProgramada?`<div class="muted" style="margin-top:6px">📅 Programado: ${esc(p.fechaProgramada)}</div>`:''}
+    ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
+  </div>`);
+  const acc = $('.acciones', item);
+  const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value})});
+
+  const bGuardar = el('<button class="btn sec mini">Guardar cambios</button>');
+  bGuardar.onclick = async () => { await guardarTexto(); toast('Guardado'); };
+  acc.appendChild(bGuardar);
+
+  if (p.estado==='borrador') {
+    const b = el('<button class="btn ok mini">✓ Aprobar</button>');
+    b.onclick = async () => { await guardarTexto(); await api('/api/publicaciones/'+p.id,{method:'PATCH',body:JSON.stringify({accion:'aprobar'})}); toast('Aprobado'); cargar(); };
+    acc.appendChild(b);
+  }
+  if (p.estado==='aprobado' || p.estado==='borrador') {
+    const b = el('<button class="btn warn mini">📅 Programar</button>');
+    b.onclick = async () => { const f = prompt('¿Fecha y hora? (ej: 2026-07-15 10:00)'); if(f){ await guardarTexto(); await api('/api/publicaciones/'+p.id,{method:'PATCH',body:JSON.stringify({accion:'programar',fecha:f})}); toast('Programado'); cargar(); } };
+    acc.appendChild(b);
+  }
+  if (p.estado!=='publicado') {
+    const b = el('<button class="btn mini">🚀 Publicar ahora</button>');
+    b.onclick = async () => { await guardarTexto(); const r = await api('/api/publicaciones/'+p.id+'/publicar',{method:'POST'}); toast(r.resultado.simulado?'Publicado (modo simulado)':'Publicado'); cargar(); };
+    acc.appendChild(b);
+  }
+  const bDel = el('<button class="btn danger mini">Eliminar</button>');
+  bDel.onclick = async () => { await api('/api/publicaciones/'+p.id,{method:'DELETE'}); cargar(); };
+  acc.appendChild(bDel);
+  return item;
+}
+
+function renderAprobaciones() {
+  const c = $('#tab-aprobaciones'); c.innerHTML = '';
+  const filtroWrap = el(`<div class="card"><div class="flex-b"><h2>Publicaciones</h2>
+    <select id="f-estado" style="max-width:200px">
+      <option value="">Todos los estados</option>
+      <option value="borrador">Borradores</option>
+      <option value="aprobado">Aprobados</option>
+      <option value="programado">Programados</option>
+      <option value="publicado">Publicados</option>
+    </select></div></div>`);
+  c.appendChild(filtroWrap);
+  const cont = el('<div></div>'); c.appendChild(cont);
+  const pintar = () => {
+    const f = $('#f-estado', filtroWrap).value;
+    cont.innerHTML = '';
+    const lista = S.publicaciones.filter(p=>!f||p.estado===f).reverse();
+    if (!lista.length) { cont.appendChild(el('<div class="empty">No hay publicaciones. Crea contenido en la pestaña Crear contenido.</div>')); return; }
+    lista.forEach(p => cont.appendChild(tarjetaPublicacion(p)));
+  };
+  $('#f-estado', filtroWrap).onchange = pintar;
+  pintar();
+}
+
+// ---------- ATENCIÓN AL CLIENTE ----------
+function renderAtencion() {
+  const c = $('#tab-atencion'); c.innerHTML = '';
+  if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa.</div>')); return; }
+  const form = el(`<div class="card">
+    <h2>Simular mensaje de un cliente</h2>
+    <p class="muted">Escribe un mensaje entrante y la IA redactará un borrador de respuesta que tú apruebas antes de enviar. En producción, esto se conecta a WhatsApp / Instagram por webhook.</p>
+    <div class="row">
+      <div><label>Empresa</label><select id="m-emp">${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
+      <div><label>Canal</label><select id="m-canal"><option>whatsapp</option><option>instagram</option><option>facebook</option><option>web</option></select></div>
+      <div><label>Cliente</label><input id="m-cliente" placeholder="Nombre o teléfono"></div>
+    </div>
+    <label>Mensaje del cliente</label>
+    <textarea id="m-texto" placeholder="Ej: Hola, ¿tienen envíos a domicilio? ¿Cuánto cuesta?"></textarea>
+    <button class="btn" id="m-go">💬 Generar respuesta</button>
+  </div>`);
+  c.appendChild(form);
+  $('#m-go', form).onclick = async () => {
+    const texto = $('#m-texto',form).value.trim();
+    if (!texto) return toast('Escribe el mensaje del cliente');
+    const btn = $('#m-go',form); btn.disabled=true; btn.textContent='Generando…';
+    try {
+      await api('/api/mensajes', { method:'POST', body: JSON.stringify({
+        empresaId: $('#m-emp',form).value, canal: $('#m-canal',form).value,
+        cliente: $('#m-cliente',form).value, texto })});
+      $('#m-texto',form).value=''; toast('Respuesta generada');
+    } catch(e){ toast('Error: '+e.message); }
+    btn.disabled=false; btn.textContent='💬 Generar respuesta'; cargar();
+  };
+
+  const pendientes = S.mensajes.filter(m=>m.estado==='pendiente').reverse();
+  const respondidos = S.mensajes.filter(m=>m.estado==='respondido').reverse();
+  c.appendChild(el(`<h3 style="margin:6px 4px">Pendientes de responder (${pendientes.length})</h3>`));
+  if (!pendientes.length) c.appendChild(el('<div class="muted" style="margin:0 4px 14px">Nada pendiente 🎉</div>'));
+  pendientes.forEach(m => c.appendChild(tarjetaMensaje(m)));
+  if (respondidos.length) {
+    c.appendChild(el(`<h3 style="margin:16px 4px 6px">Respondidos (${respondidos.length})</h3>`));
+    respondidos.slice(0,10).forEach(m => c.appendChild(tarjetaMensaje(m)));
+  }
+}
+
+function tarjetaMensaje(m) {
+  const item = el(`<div class="item">
+    <div class="top"><div><span class="estado e-${m.estado}">${m.estado}</span> <span class="tag">${m.canal}</span> <span class="muted">${esc(nombreEmpresa(m.empresaId))}</span></div><span class="muted">${esc(m.cliente)}</span></div>
+    <div style="margin:4px 0 10px"><small class="hs">Cliente:</small><div>${esc(m.texto)}</div></div>
+    <label>Respuesta (borrador de la IA — edítala si quieres)</label>
+    <textarea class="m-resp">${esc(m.respuestaBorrador)}</textarea>
+    <div class="acciones"></div>
+  </div>`);
+  const acc = $('.acciones', item);
+  if (m.estado==='pendiente') {
+    const bEnv = el('<button class="btn ok mini">✓ Aprobar y enviar</button>');
+    bEnv.onclick = async () => { const r = await api('/api/mensajes/'+m.id+'/responder',{method:'POST',body:JSON.stringify({respuesta:$('.m-resp',item).value})}); toast(r.envio.simulado?'Enviado (simulado)':'Enviado'); cargar(); };
+    acc.appendChild(bEnv);
+    const bReg = el('<button class="btn sec mini">↻ Regenerar</button>');
+    bReg.onclick = async () => { toast('Regenerando…'); await api('/api/mensajes/'+m.id+'/regenerar',{method:'POST'}); cargar(); };
+    acc.appendChild(bReg);
+  }
+  const bDel = el('<button class="btn danger mini">Eliminar</button>');
+  bDel.onclick = async () => { await api('/api/mensajes/'+m.id,{method:'DELETE'}); cargar(); };
+  acc.appendChild(bDel);
+  return item;
+}
+
+cargar();
+</script>
+</body>
+</html>
