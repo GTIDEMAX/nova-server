@@ -152,14 +152,50 @@ async function publicarGenerico(pub) {
 }
 
 // --- Envio de mensajes de WhatsApp (atencion al cliente) ---
-async function enviarWhatsApp(telefono, texto) {
+async function enviarWhatsApp(telefono, texto, phoneId) {
   const token = process.env.WHATSAPP_TOKEN;
-  const phoneId = process.env.WHATSAPP_PHONE_ID;
-  if (!token || !phoneId) {
+  const pid = phoneId || process.env.WHATSAPP_PHONE_ID;
+  if (!token || !pid) {
     return { ok: true, simulado: true, canal: 'whatsapp', nota: 'Enviado en modo simulado (sin credenciales de WhatsApp).' };
   }
-  // TODO: POST https://graph.facebook.com/v21.0/{phoneId}/messages
-  return { ok: true, simulado: false, canal: 'whatsapp' };
+  try {
+    const r = await fetch(`${GRAPH}/${pid}/messages`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: String(telefono).replace(/\D/g, ''),
+        type: 'text',
+        text: { body: texto },
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.error ? data.error.message : 'HTTP ' + r.status);
+    return { ok: true, simulado: false, canal: 'whatsapp', idExterno: data.messages?.[0]?.id, nota: 'Enviado por WhatsApp ✅' };
+  } catch (e) {
+    return { ok: false, simulado: false, canal: 'whatsapp', error: e.message, nota: 'Error al enviar por WhatsApp: ' + e.message };
+  }
+}
+
+// --- Verifica la conexion con WhatsApp (para el panel) ---
+async function verificarWhatsApp() {
+  const token = process.env.WHATSAPP_TOKEN;
+  const pid = process.env.WHATSAPP_PHONE_ID;
+  const estado = { configurado: !!(token && pid), ok: false, detalle: '' };
+  if (!token || !pid) {
+    estado.detalle = 'Sin WHATSAPP_TOKEN o WHATSAPP_PHONE_ID. Modo simulado.';
+    return estado;
+  }
+  try {
+    const r = await fetch(`${GRAPH}/${pid}?fields=display_phone_number,verified_name&access_token=${encodeURIComponent(token)}`);
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.message);
+    estado.ok = true;
+    estado.detalle = `WhatsApp: ${d.verified_name || ''} (${d.display_phone_number || ''})`;
+  } catch (e) {
+    estado.detalle = 'Error de conexion con WhatsApp: ' + e.message;
+  }
+  return estado;
 }
 
 function simulado(plataforma, pub, motivo) {
@@ -172,4 +208,4 @@ function simulado(plataforma, pub, motivo) {
   };
 }
 
-module.exports = { publicar, enviarWhatsApp, verificarMeta };
+module.exports = { publicar, enviarWhatsApp, verificarMeta, verificarWhatsApp };

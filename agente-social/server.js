@@ -71,6 +71,11 @@ async function manejarAPI(req, res, ruta) {
     return enviarJSON(res, 200, await adapters.verificarMeta());
   }
 
+  // Estado de conexion con WhatsApp
+  if (recurso === 'whatsapp' && partes[2] === 'estado' && req.method === 'GET') {
+    return enviarJSON(res, 200, await adapters.verificarWhatsApp());
+  }
+
   // Estado del programador automatico
   if (recurso === 'programador' && partes[2] === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, scheduler.estadoScheduler());
@@ -92,6 +97,8 @@ async function manejarAPI(req, res, ruta) {
         tono: body.tono || 'cercano y profesional',
         publico: body.publico || '',
         plataformas: Array.isArray(body.plataformas) ? body.plataformas : [],
+        whatsappPhoneId: body.whatsappPhoneId || '',
+        autoResponder: !!body.autoResponder,
         creado: new Date().toISOString(),
       };
       estado.empresas.push(empresa);
@@ -184,29 +191,13 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'POST' && !partes[2]) {
       const empresa = buscar('empresas', body.empresaId);
       if (!empresa) return enviarJSON(res, 400, { error: 'Empresa no encontrada' });
-      let borrador = '';
-      try {
-        borrador = await ia.redactarRespuesta({
-          empresa,
-          canal: body.canal || 'whatsapp',
-          cliente: body.cliente,
-          texto: body.texto || '',
-        });
-      } catch (e) {
-        borrador = 'No se pudo generar la respuesta automatica: ' + e.message;
-      }
-      const msg = {
-        id: id(),
-        empresaId: empresa.id,
+      const msg = await crearMensajeEntrante({
+        empresa,
         canal: body.canal || 'whatsapp',
-        cliente: body.cliente || 'Cliente',
+        cliente: body.cliente,
         texto: body.texto || '',
-        respuestaBorrador: borrador,
-        estado: 'pendiente',
-        creado: new Date().toISOString(),
-      };
-      estado.mensajes.push(msg);
-      guardar();
+        telefono: body.telefono,
+      });
       return enviarJSON(res, 201, msg);
     }
 
@@ -231,7 +222,7 @@ async function manejarAPI(req, res, ruta) {
         if (typeof body.respuesta === 'string') msg.respuestaBorrador = body.respuesta;
         let envio = { ok: true, simulado: true };
         if (msg.canal === 'whatsapp') {
-          envio = await adapters.enviarWhatsApp(msg.cliente, msg.respuestaBorrador);
+          envio = await adapters.enviarWhatsApp(msg.telefono || msg.cliente, msg.respuestaBorrador, msg.whatsappPhoneId);
         }
         msg.estado = 'respondido';
         msg.respondido = new Date().toISOString();
@@ -248,6 +239,93 @@ async function manejarAPI(req, res, ruta) {
   }
 
   return enviarJSON(res, 404, { error: 'Ruta no encontrada' });
+}
+
+// ---------- mensajes entrantes (usado por API y por el webhook de WhatsApp) ----------
+async function crearMensajeEntrante({ empresa, canal, cliente, texto, telefono, whatsappPhoneId }) {
+  let borrador = '';
+  try {
+    borrador = await ia.redactarRespuesta({ empresa, canal, cliente: cliente || 'Cliente', texto: texto || '' });
+  } catch (e) {
+    borrador = 'No se pudo generar la respuesta automatica: ' + e.message;
+  }
+  const msg = {
+    id: id(),
+    empresaId: empresa.id,
+    canal: canal || 'whatsapp',
+    cliente: cliente || 'Cliente',
+    telefono: telefono || '',
+    whatsappPhoneId: whatsappPhoneId || '',
+    texto: texto || '',
+    respuestaBorrador: borrador,
+    estado: 'pendiente',
+    creado: new Date().toISOString(),
+  };
+  // Auto-respuesta por empresa (solo WhatsApp): responde solo, sin aprobacion
+  if (empresa.autoResponder && (canal || 'whatsapp') === 'whatsapp') {
+    const envio = await adapters.enviarWhatsApp(telefono || cliente, borrador, whatsappPhoneId);
+    if (envio.ok) {
+      msg.estado = 'respondido';
+      msg.respondido = new Date().toISOString();
+      msg.envio = envio;
+      msg.auto = true;
+    }
+  }
+  estado.mensajes.push(msg);
+  guardar();
+  return msg;
+}
+
+// ---------- webhook de WhatsApp Cloud API ----------
+function verificarWebhookWhatsApp(req, res) {
+  const q = new URLSearchParams(req.url.split('?')[1] || '');
+  const mode = q.get('hub.mode');
+  const token = q.get('hub.verify_token');
+  const challenge = q.get('hub.challenge');
+  const esperado = process.env.WHATSAPP_VERIFY_TOKEN || 'agente-social';
+  if (mode === 'subscribe' && token === esperado) {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    return res.end(challenge || '');
+  }
+  res.writeHead(403, { 'Content-Type': 'text/plain' });
+  res.end('Forbidden');
+}
+
+async function recibirWebhookWhatsApp(req, res) {
+  const body = await leerBody(req);
+  // WhatsApp exige un 200 rapido; respondemos y procesamos despues.
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('EVENT_RECEIVED');
+  try {
+    await procesarWhatsApp(body);
+  } catch (e) {
+    console.error('[whatsapp] error procesando webhook:', e.message);
+  }
+}
+
+async function procesarWhatsApp(body) {
+  const entradas = (body && body.entry) || [];
+  for (const entry of entradas) {
+    for (const change of entry.changes || []) {
+      const value = change.value || {};
+      const phoneId = value.metadata && value.metadata.phone_number_id;
+      const contactos = value.contacts || [];
+      for (const m of value.messages || []) {
+        if (m.type !== 'text') continue; // por ahora solo texto
+        const from = m.from;
+        const contacto = contactos.find((c) => c.wa_id === from);
+        const nombre = (contacto && contacto.profile && contacto.profile.name) || from;
+        // Enruta al negocio dueño de ese numero, o al primero registrado
+        const empresa = estado.empresas.find((e) => e.whatsappPhoneId && e.whatsappPhoneId === phoneId) || estado.empresas[0];
+        if (!empresa) {
+          console.log('[whatsapp] mensaje recibido pero no hay empresas registradas');
+          continue;
+        }
+        await crearMensajeEntrante({ empresa, canal: 'whatsapp', cliente: nombre, texto: m.text.body, telefono: from, whatsappPhoneId: phoneId });
+        console.log(`[whatsapp] mensaje de ${from} -> ${empresa.nombre}${empresa.autoResponder ? ' (respondido auto)' : ''}`);
+      }
+    }
+  }
 }
 
 // ---------- metricas ----------
@@ -346,6 +424,8 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (ruta === '/webhook/whatsapp' && req.method === 'GET') return verificarWebhookWhatsApp(req, res);
+  if (ruta === '/webhook/whatsapp' && req.method === 'POST') return recibirWebhookWhatsApp(req, res);
   if (ruta.startsWith('/feed/')) return manejarFeed(req, res, ruta);
   if (ruta.startsWith('/widget/')) return manejarWidget(req, res, ruta);
   servirEstatico(req, res);

@@ -164,6 +164,10 @@ function renderEmpresas() {
     </div>
     <label>Plataformas que maneja</label>
     <div class="chips" id="e-plats"></div>
+    <div class="row">
+      <div><label>WhatsApp Phone ID <small class="hs">(opcional)</small></label><input id="e-wa" placeholder="Id del número de WhatsApp Business"></div>
+      <div><label>Auto-responder WhatsApp</label><select id="e-auto"><option value="">No — yo apruebo antes de enviar</option><option value="1">Sí — responder solo con IA</option></select></div>
+    </div>
     <button class="btn" id="e-guardar">Guardar empresa</button>
   </div>`);
   c.appendChild(form);
@@ -179,7 +183,8 @@ function renderEmpresas() {
     if (!nombre) return toast('Pon un nombre');
     await api('/api/empresas', { method:'POST', body: JSON.stringify({
       nombre, rubro: $('#e-rubro',form).value, tono: $('#e-tono',form).value,
-      publico: $('#e-publico',form).value, plataformas: [...platsSel]
+      publico: $('#e-publico',form).value, plataformas: [...platsSel],
+      whatsappPhoneId: $('#e-wa',form).value, autoResponder: !!$('#e-auto',form).value
     })});
     toast('Empresa guardada'); cargar();
   };
@@ -190,6 +195,7 @@ function renderEmpresas() {
       <div class="top"><h3>${esc(e.nombre)}</h3><span class="tag">${esc(e.rubro||'sin rubro')}</span></div>
       <div class="muted">Tono: ${esc(e.tono)} · Público: ${esc(e.publico||'—')}</div>
       <div class="chips">${(e.plataformas||[]).map(p=>`<span class="chip sel">${p}</span>`).join('') || '<span class="muted">sin plataformas</span>'}</div>
+      ${e.autoResponder?'<div class="muted" style="margin-top:6px">🤖 Auto-respuesta de WhatsApp activada</div>':''}
       <div class="acciones"><button class="btn danger mini">Eliminar</button></div>
     </div>`);
     $('.danger', item).onclick = async () => { if(confirm('¿Eliminar '+e.nombre+' y todo su contenido?')){ await api('/api/empresas/'+e.id,{method:'DELETE'}); cargar(); } };
@@ -325,6 +331,16 @@ async function renderAprobaciones() {
 function renderAtencion() {
   const c = $('#tab-atencion'); c.innerHTML = '';
   if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa.</div>')); return; }
+
+  const waCard = el(`<div class="card"><div class="flex-b"><h3>📱 Conexión con WhatsApp</h3><span class="badge" id="wa-badge">comprobando…</span></div><div class="muted" id="wa-detalle" style="margin-top:6px"></div></div>`);
+  c.appendChild(waCard);
+  api('/api/whatsapp/estado').then(w => {
+    const b = $('#wa-badge', waCard);
+    b.textContent = w.ok ? 'Conectado ✅' : (w.configurado ? 'Con error' : 'Modo simulado');
+    b.className = 'badge ' + (w.ok ? 'on' : 'off');
+    $('#wa-detalle', waCard).textContent = w.detalle + (w.ok ? '' : ' · Los mensajes reales llegan al desplegar y configurar el webhook /webhook/whatsapp.');
+  }).catch(()=>{});
+
   const form = el(`<div class="card">
     <h2>Simular mensaje de un cliente</h2>
     <p class="muted">Escribe un mensaje entrante y la IA redactará un borrador de respuesta que tú apruebas antes de enviar. En producción, esto se conecta a WhatsApp / Instagram por webhook.</p>
@@ -364,7 +380,7 @@ function renderAtencion() {
 
 function tarjetaMensaje(m) {
   const item = el(`<div class="item">
-    <div class="top"><div><span class="estado e-${m.estado}">${m.estado}</span> <span class="tag">${m.canal}</span> <span class="muted">${esc(nombreEmpresa(m.empresaId))}</span></div><span class="muted">${esc(m.cliente)}</span></div>
+    <div class="top"><div><span class="estado e-${m.estado}">${m.estado}</span> <span class="tag">${m.canal}</span> ${m.auto?'<span class="tag">🤖 auto</span>':''} <span class="muted">${esc(nombreEmpresa(m.empresaId))}</span></div><span class="muted">${esc(m.cliente)}${m.telefono?' · '+esc(m.telefono):''}</span></div>
     <div style="margin:4px 0 10px"><small class="hs">Cliente:</small><div>${esc(m.texto)}</div></div>
     <label>Respuesta (borrador de la IA — edítala si quieres)</label>
     <textarea class="m-resp">${esc(m.respuestaBorrador)}</textarea>

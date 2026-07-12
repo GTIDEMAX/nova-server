@@ -96,6 +96,38 @@ npm start
 
 > El estado del programador (activo, cada cuánto revisa, cuántas hay programadas) se muestra en la parte superior de la pestaña Publicaciones.
 
+## Conectar WhatsApp Cloud API 💬
+
+El agente **recibe** mensajes de tus clientes y **responde** por WhatsApp de verdad.
+
+### Variables
+
+```bash
+export WHATSAPP_TOKEN="EAAG..."          # token de la app de WhatsApp
+export WHATSAPP_PHONE_ID="123456789"      # id del número de WhatsApp Business
+export WHATSAPP_VERIFY_TOKEN="mitoken"    # lo eliges tú (debe coincidir con Meta)
+```
+
+### Recibir mensajes (webhook)
+
+Cuando un cliente escribe, WhatsApp avisa a tu agente en:
+
+```
+GET/POST  https://TU-SERVIDOR/webhook/whatsapp
+```
+
+En el panel de Meta (WhatsApp → Configuración → Webhooks) pones esa URL y tu `WHATSAPP_VERIFY_TOKEN`. Al llegar un mensaje, el agente crea la conversación y la IA redacta el borrador.
+
+> El webhook necesita una URL pública (internet), así que esto funciona una vez **desplegado**. Mientras tanto puedes probar todo el flujo con "Simular mensaje" en la pestaña Atención al cliente.
+
+### Auto-respuesta (por empresa)
+
+Al registrar una empresa puedes activar **"Auto-responder WhatsApp"**:
+- **Sí** → la IA responde sola, al instante.
+- **No** (recomendado al inicio) → la IA redacta y tú apruebas antes de enviar.
+
+También puedes indicar el **WhatsApp Phone ID** de cada empresa para enrutar los mensajes al negocio correcto cuando manejas varios números.
+
 ## Conectar tu página de ventas / web 🌐
 
 En la pestaña **Mi web** puedes mostrar tus publicaciones en tu propio sitio (por ejemplo, gtidemexico.com) **sin programar nada**:
