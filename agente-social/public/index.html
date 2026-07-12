@@ -72,6 +72,7 @@
   <button data-tab="contenido">✍️ Crear contenido</button>
   <button data-tab="aprobaciones">📅 Publicaciones</button>
   <button data-tab="atencion">💬 Atención al cliente</button>
+  <button data-tab="web">🌐 Mi web</button>
 </nav>
 
 <main>
@@ -79,6 +80,7 @@
   <section id="tab-contenido" hidden></section>
   <section id="tab-aprobaciones" hidden></section>
   <section id="tab-atencion" hidden></section>
+  <section id="tab-web" hidden></section>
 </main>
 
 <div id="toast" class="toast"></div>
@@ -114,7 +116,7 @@ let tab = 'empresas';
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===btn));
-  ['empresas','contenido','aprobaciones','atencion'].forEach(t => $('#tab-'+t).hidden = t!==tab);
+  ['empresas','contenido','aprobaciones','atencion','web'].forEach(t => $('#tab-'+t).hidden = t!==tab);
   render();
 });
 
@@ -123,6 +125,7 @@ function render() {
   if (tab==='contenido') renderContenido();
   if (tab==='aprobaciones') renderAprobaciones();
   if (tab==='atencion') renderAtencion();
+  if (tab==='web') renderWeb();
 }
 
 // ---------- EMPRESAS ----------
@@ -360,6 +363,48 @@ function tarjetaMensaje(m) {
   bDel.onclick = async () => { await api('/api/mensajes/'+m.id,{method:'DELETE'}); cargar(); };
   acc.appendChild(bDel);
   return item;
+}
+
+// ---------- MI WEB (feed + widget embebible) ----------
+function renderWeb() {
+  const c = $('#tab-web'); c.innerHTML = '';
+  if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa.</div>')); return; }
+  const origin = location.origin;
+  const card = el(`<div class="card">
+    <h2>Conectar tu página de ventas / web</h2>
+    <p class="muted">Muestra tus publicaciones en tu sitio con una línea de código. El agente genera un feed público y un widget que se actualiza solo cuando publicas.</p>
+    <label>Empresa</label>
+    <select id="w-emp">${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select>
+    <div id="w-detalle"></div>
+  </div>`);
+  c.appendChild(card);
+  const pintar = () => {
+    const eid = $('#w-emp', card).value;
+    const feedUrl = `${origin}/feed/${eid}`;
+    const rssUrl = `${origin}/feed/${eid}/rss`;
+    const widgetUrl = `${origin}/widget/${eid}`;
+    const iframe = `<iframe src="${widgetUrl}" style="width:100%;border:0;min-height:520px" title="Publicaciones"></iframe>`;
+    const d = $('#w-detalle', card);
+    d.innerHTML = '';
+    d.appendChild(el(`<div>
+      <h3 style="margin-top:16px">1) Código para pegar en tu web</h3>
+      <p class="muted">Copia esto y pégalo donde quieras que aparezcan tus publicaciones (ej. en gtidemexico.com).</p>
+      <textarea id="w-embed" style="min-height:70px" readonly>${esc(iframe)}</textarea>
+      <button class="btn sec mini" id="w-copy">Copiar código</button>
+
+      <h3 style="margin-top:18px">2) Enlaces del feed (para desarrolladores)</h3>
+      <p class="muted">Feed JSON: <a href="${feedUrl}" target="_blank" style="color:var(--acc2)">${esc(feedUrl)}</a></p>
+      <p class="muted">Feed RSS: <a href="${rssUrl}" target="_blank" style="color:var(--acc2)">${esc(rssUrl)}</a></p>
+
+      <h3 style="margin-top:18px">3) Vista previa</h3>
+      <div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff">${iframe}</div>
+
+      <p class="muted" style="margin-top:14px">💡 Solo aparecen las publicaciones en estado <b>publicado</b> (crea contenido para la plataforma "web" o "blog", apruébalo y publícalo). Si tienes tu propio backend, configura <code>WEB_PUBLISH_WEBHOOK</code> para recibir cada publicación por POST.</p>
+    </div>`));
+    $('#w-copy', d).onclick = () => { navigator.clipboard.writeText(iframe).then(()=>toast('Código copiado')).catch(()=>toast('Selecciona y copia manualmente')); };
+  };
+  $('#w-emp', card).onchange = pintar;
+  pintar();
 }
 
 cargar();

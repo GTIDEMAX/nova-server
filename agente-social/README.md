@@ -96,6 +96,23 @@ npm start
 
 > El estado del programador (activo, cada cuánto revisa, cuántas hay programadas) se muestra en la parte superior de la pestaña Publicaciones.
 
+## Conectar tu página de ventas / web 🌐
+
+En la pestaña **Mi web** puedes mostrar tus publicaciones en tu propio sitio (por ejemplo, gtidemexico.com) **sin programar nada**:
+
+- **Widget embebible**: copia un `<iframe>` y pégalo en tu página. Se actualiza solo cada vez que publicas.
+  ```html
+  <iframe src="http://TU-SERVIDOR/widget/ID_EMPRESA" style="width:100%;border:0;min-height:520px"></iframe>
+  ```
+- **Feed JSON**: `http://TU-SERVIDOR/feed/ID_EMPRESA` — para consumir desde tu propio código.
+- **Feed RSS**: `http://TU-SERVIDOR/feed/ID_EMPRESA/rss` — para lectores de feeds e integraciones.
+
+Solo aparecen las publicaciones en estado **publicado** (crea contenido para la plataforma "web" o "blog", apruébalo y publícalo).
+
+> Si tienes tu propio backend y prefieres recibir cada publicación por POST, configura `WEB_PUBLISH_WEBHOOK` con la URL de tu endpoint; el agente le enviará `{titulo, contenido, hashtags, imagenUrl}`.
+
+> Para publicar en internet real (no solo localhost), despliega el servidor en un hosting con Node.js (Render, Railway, un VPS, etc.) y usa esa URL pública en el `<iframe>`.
+
 ## Autonomía (mixta, como pediste)
 
 - **Contenido** → siempre pasa por tu aprobación antes de publicarse.

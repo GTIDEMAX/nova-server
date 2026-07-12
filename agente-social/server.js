@@ -9,6 +9,7 @@ const { estado, guardar, id } = require('./store');
 const ia = require('./ia');
 const adapters = require('./adapters');
 const scheduler = require('./scheduler');
+const feed = require('./feed');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -243,6 +244,35 @@ async function manejarAPI(req, res, ruta) {
   return enviarJSON(res, 404, { error: 'Ruta no encontrada' });
 }
 
+// ---------- feed publico + widget para la web del cliente ----------
+function manejarFeed(req, res, ruta) {
+  // /feed/:empresaId  o  /feed/:empresaId/rss
+  const partes = ruta.split('/').filter(Boolean); // ['feed', empresaId, ('rss')?]
+  const empresa = feed.empresaPorId(partes[1]);
+  if (!empresa) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Empresa no encontrada');
+  }
+  if (partes[2] === 'rss') {
+    const origin = 'http://' + (req.headers.host || 'localhost');
+    res.writeHead(200, { 'Content-Type': 'application/rss+xml; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+    return res.end(feed.feedRSS(empresa, origin));
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(feed.feedJSON(empresa)));
+}
+
+function manejarWidget(req, res, ruta) {
+  const partes = ruta.split('/').filter(Boolean); // ['widget', empresaId]
+  const empresa = feed.empresaPorId(partes[1]);
+  if (!empresa) {
+    res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end('<p>Empresa no encontrada</p>');
+  }
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+  res.end(feed.widgetHTML(empresa));
+}
+
 // ---------- servidor ----------
 const server = http.createServer(async (req, res) => {
   const ruta = req.url.split('?')[0];
@@ -254,6 +284,8 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (ruta.startsWith('/feed/')) return manejarFeed(req, res, ruta);
+  if (ruta.startsWith('/widget/')) return manejarWidget(req, res, ruta);
   servirEstatico(req, res);
 });
 
