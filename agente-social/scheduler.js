@@ -29,7 +29,10 @@ async function tick() {
     cambios = true;
     try {
       const empresa = buscarEmpresa(p.empresaId);
-      const resultado = await adapters.publicar(p.plataforma, p, empresa);
+      // Absolutiza la imagen si es una ruta local (Meta exige URL publica completa)
+      const base = process.env.PUBLIC_BASE_URL || '';
+      const pEnvio = p.imagenUrl && p.imagenUrl.startsWith('/') && base ? { ...p, imagenUrl: base + p.imagenUrl } : p;
+      const resultado = await adapters.publicar(p.plataforma, pEnvio, empresa);
       p.resultadoPublicacion = resultado;
       if (resultado.ok) {
         p.estado = 'publicado';

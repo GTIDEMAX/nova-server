@@ -57,7 +57,7 @@ async function generarContenido({ empresa, plataforma, tema, cantidad }) {
   const user =
     `Genera ${n} publicaciones distintas sobre: "${tema || 'novedades y promociones del negocio'}".\n` +
     `Devuelve UNICAMENTE un array JSON. Cada elemento con esta forma exacta:\n` +
-    `{"texto": "cuerpo de la publicacion", "hashtags": ["#uno", "#dos"]}\n` +
+    `{"texto": "cuerpo de la publicacion", "hashtags": ["#uno", "#dos"], "imagenPrompt": "descripcion en INGLES de una imagen promocional profesional y fotorrealista para este post (escena, iluminacion, estilo, ambiente); sin logos ni parrafos de texto; que NO parezca ilustracion de IA"}\n` +
     `Sin explicaciones, solo el JSON.`;
 
   const resp = await client.messages.create({
@@ -76,6 +76,7 @@ async function generarContenido({ empresa, plataforma, tema, cantidad }) {
   return parsed.slice(0, n).map((p) => ({
     texto: String(p.texto || '').trim(),
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
+    imagenPrompt: String(p.imagenPrompt || '').trim(),
   }));
 }
 
@@ -119,6 +120,7 @@ function demoContenido(empresa, plataforma, tema, n) {
         `Descubre lo que tenemos para ti en ${plataforma}. ` +
         `Escribenos y te atendemos al momento. (Configura ANTHROPIC_API_KEY para texto real con IA.)`,
       hashtags: ['#' + (empresa.rubro || 'negocio').replace(/\s+/g, ''), '#promo', '#' + empresa.nombre.replace(/\s+/g, '')],
+      imagenPrompt: `Modern professional promotional photo for a technology store about ${base}, clean premium look`,
     });
   }
   return arr;

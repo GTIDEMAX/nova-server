@@ -216,17 +216,22 @@ function renderContenido() {
     </div>
     <label>Tema / idea (opcional)</label>
     <textarea id="g-tema" placeholder="Ej: promoción de fin de semana 2x1, lanzamiento de producto nuevo, consejos útiles..."></textarea>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+      <input type="checkbox" id="g-img" ${S.imagenActiva?'checked':''} ${S.imagenActiva?'':'disabled'} style="width:auto">
+      🎨 Crear también la imagen con IA ${S.imagenActiva?'':'<small class="hs">(activa IMAGE_API_KEY para usarlo)</small>'}
+    </label>
     <button class="btn" id="g-go">✨ Generar borradores</button>
     <div id="g-status" class="muted" style="margin-top:10px"></div>
   </div>`);
   c.appendChild(form);
   $('#g-go', form).onclick = async () => {
     const btn = $('#g-go', form); btn.disabled = true;
-    $('#g-status', form).textContent = 'Generando con IA… (puede tardar unos segundos)';
+    const conImagen = $('#g-img',form) && $('#g-img',form).checked;
+    $('#g-status', form).textContent = conImagen ? 'Generando texto e imágenes con IA… (las imágenes tardan un poco más)' : 'Generando con IA… (puede tardar unos segundos)';
     try {
       const r = await api('/api/contenido/generar', { method:'POST', body: JSON.stringify({
         empresaId: $('#g-emp',form).value, plataforma: $('#g-plat',form).value,
-        cantidad: $('#g-cant',form).value, tema: $('#g-tema',form).value })});
+        cantidad: $('#g-cant',form).value, tema: $('#g-tema',form).value, conImagen })});
       toast('Se crearon '+r.publicaciones.length+' borradores');
       $('#g-status', form).textContent = 'Listo. Míralos en la pestaña Publicaciones para aprobar.';
     } catch(e){ toast('Error: '+e.message); $('#g-status',form).textContent=''; }
@@ -248,6 +253,7 @@ function tarjetaPublicacion(p) {
     </div>
     <textarea class="p-texto">${esc(p.texto)}</textarea>
     <div class="chips">${(p.hashtags||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join('')}</div>
+    ${p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:8px">${p.imagenIA?'<div class="muted" style="margin-top:4px">🎨 Imagen sugerida por IA · para el producto real, sube tu foto</div>':''}`:''}
     <label>URL de imagen ${(p.plataforma==='instagram')?'<small class="hs">(obligatoria en Instagram)</small>':'(opcional)'}</label>
     <input class="p-img" placeholder="https://…/imagen.jpg" value="${esc(p.imagenUrl||'')}">
     ${p.estado!=='publicado'?`<label>Programar para (fecha y hora)</label><input type="datetime-local" class="p-fecha" value="${esc(p.fechaProgramada||'')}">`:''}
@@ -263,6 +269,12 @@ function tarjetaPublicacion(p) {
   const bGuardar = el('<button class="btn sec mini">Guardar cambios</button>');
   bGuardar.onclick = async () => { await guardarTexto(); toast('Guardado'); };
   acc.appendChild(bGuardar);
+
+  if (S.imagenActiva) {
+    const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenUrl?'Regenerar':'Generar')+' imagen IA</button>');
+    bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };
+    acc.appendChild(bImg);
+  }
 
   if (p.estado==='borrador') {
     const b = el('<button class="btn ok mini">✓ Aprobar</button>');

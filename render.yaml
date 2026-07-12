@@ -12,8 +12,14 @@ services:
     startCommand: npm start
     autoDeploy: true
     envVars:
-      # IA (Claude) — pon tu clave para textos reales
+      # IA de texto (Claude) — pon tu clave para textos reales
       - key: ANTHROPIC_API_KEY
+        sync: false
+      # IA de imagenes (OpenAI gpt-image-1) — pon tu clave para generar imagenes
+      - key: IMAGE_API_KEY
+        sync: false
+      # URL publica de la app (para publicar imagenes generadas desde el programador)
+      - key: PUBLIC_BASE_URL
         sync: false
       # Meta (Instagram + Facebook)
       - key: META_ACCESS_TOKEN

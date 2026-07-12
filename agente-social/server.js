@@ -10,11 +10,23 @@ const ia = require('./ia');
 const adapters = require('./adapters');
 const scheduler = require('./scheduler');
 const feed = require('./feed');
+const imagen = require('./imagen');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+
+// Convierte una ruta de imagen relativa (/generated/x.png) en URL absoluta,
+// necesaria para publicar en redes (Meta exige URL publica completa).
+function absolutizar(url, base) {
+  if (url && url.startsWith('/') && base) return base + url;
+  return url;
+}
+function baseDeReq(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'https';
+  return proto + '://' + (req.headers.host || '');
+}
 
 // ---------- utilidades ----------
 function enviarJSON(res, code, obj) {
@@ -63,7 +75,7 @@ async function manejarAPI(req, res, ruta) {
 
   // Estado general (todo lo que necesita el panel)
   if (recurso === 'estado' && req.method === 'GET') {
-    return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO });
+    return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO, imagenActiva: imagen.hayImagen });
   }
 
   // Estado de conexion con Meta (Instagram + Facebook)
@@ -133,6 +145,8 @@ async function manejarAPI(req, res, ruta) {
           texto: idea.texto,
           hashtags: idea.hashtags || [],
           imagenUrl: '',
+          imagenPrompt: idea.imagenPrompt || '',
+          imagenIA: false,
           estado: 'borrador',
           fechaProgramada: null,
           creado: new Date().toISOString(),
@@ -141,7 +155,20 @@ async function manejarAPI(req, res, ruta) {
         return pub;
       });
       guardar();
-      return enviarJSON(res, 201, { publicaciones: creadas });
+      // Genera imagenes con IA si se pidio y hay clave de imagen
+      if (body.conImagen && imagen.hayImagen) {
+        for (const pub of creadas) {
+          try {
+            const prompt = imagen.construirPrompt({ empresa, plataforma: pub.plataforma, texto: pub.texto, imagenPrompt: pub.imagenPrompt });
+            const url = await imagen.generarImagen(prompt, pub.id);
+            if (url) { pub.imagenUrl = url; pub.imagenIA = true; }
+          } catch (e) {
+            pub.imagenError = e.message;
+          }
+        }
+        guardar();
+      }
+      return enviarJSON(res, 201, { publicaciones: creadas, imagenActiva: imagen.hayImagen });
     } catch (e) {
       return enviarJSON(res, 500, { error: 'Error generando contenido: ' + e.message });
     }
@@ -172,9 +199,27 @@ async function manejarAPI(req, res, ruta) {
       guardar();
       return enviarJSON(res, 200, pub);
     }
+    // (Re)generar imagen con IA para esta publicacion
+    if (partes[3] === 'imagen' && req.method === 'POST') {
+      if (!imagen.hayImagen) return enviarJSON(res, 400, { error: 'Falta IMAGE_API_KEY para generar imagenes con IA' });
+      const empresa = buscar('empresas', pub.empresaId);
+      try {
+        const prompt = imagen.construirPrompt({ empresa, plataforma: pub.plataforma, texto: pub.texto, imagenPrompt: pub.imagenPrompt || body.imagenPrompt });
+        const url = await imagen.generarImagen(prompt, pub.id + '-' + Date.now().toString(36));
+        pub.imagenUrl = url;
+        pub.imagenIA = true;
+        pub.imagenError = null;
+        guardar();
+        return enviarJSON(res, 200, { publicacion: pub });
+      } catch (e) {
+        return enviarJSON(res, 500, { error: 'Error generando imagen: ' + e.message });
+      }
+    }
     if (partes[3] === 'publicar' && req.method === 'POST') {
       const empresa = buscar('empresas', pub.empresaId);
-      const resultado = await adapters.publicar(pub.plataforma, pub, empresa);
+      const base = baseDeReq(req);
+      const pubEnvio = { ...pub, imagenUrl: absolutizar(pub.imagenUrl, base) };
+      const resultado = await adapters.publicar(pub.plataforma, pubEnvio, empresa);
       if (resultado.ok) {
         pub.estado = 'publicado';
         pub.publicado = new Date().toISOString();
