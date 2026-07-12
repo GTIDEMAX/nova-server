@@ -47,6 +47,7 @@
   .e-aprobado { background: #204a44; color: #7ff0d6; }
   .e-programado { background: #4a3d1a; color: #ffd98a; }
   .e-publicado { background: #1f3f66; color: #8fc4ff; }
+  .e-fallido { background: #4a2130; color: #ff9db0; }
   .e-pendiente { background: #4a2130; color: #ffb3c4; }
   .e-respondido { background: #204a44; color: #7ff0d6; }
   .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -220,8 +221,11 @@ function tarjetaPublicacion(p) {
     <div class="chips">${(p.hashtags||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join('')}</div>
     <label>URL de imagen ${(p.plataforma==='instagram')?'<small class="hs">(obligatoria en Instagram)</small>':'(opcional)'}</label>
     <input class="p-img" placeholder="https://…/imagen.jpg" value="${esc(p.imagenUrl||'')}">
+    ${p.estado!=='publicado'?`<label>Programar para (fecha y hora)</label><input type="datetime-local" class="p-fecha" value="${esc(p.fechaProgramada||'')}">`:''}
     <div class="acciones"></div>
-    ${p.fechaProgramada?`<div class="muted" style="margin-top:6px">📅 Programado: ${esc(p.fechaProgramada)}</div>`:''}
+    ${p.fechaProgramada && p.estado==='programado'?`<div class="muted" style="margin-top:6px">📅 Se publicará automáticamente el ${esc(p.fechaProgramada.replace('T',' '))}</div>`:''}
+    ${p.ultimoError?`<div class="muted" style="margin-top:6px">⚠️ ${esc(p.ultimoError)} ${p.intentos?`(intentos: ${p.intentos})`:''}</div>`:''}
+    ${p.publicadoPor==='programador'?`<div class="muted" style="margin-top:4px">🤖 Publicado automáticamente por el programador</div>`:''}
     ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${!p.resultadoPublicacion.ok?'🔴 ':p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
   </div>`);
   const acc = $('.acciones', item);
@@ -236,9 +240,9 @@ function tarjetaPublicacion(p) {
     b.onclick = async () => { await guardarTexto(); await api('/api/publicaciones/'+p.id,{method:'PATCH',body:JSON.stringify({accion:'aprobar'})}); toast('Aprobado'); cargar(); };
     acc.appendChild(b);
   }
-  if (p.estado==='aprobado' || p.estado==='borrador') {
-    const b = el('<button class="btn warn mini">📅 Programar</button>');
-    b.onclick = async () => { const f = prompt('¿Fecha y hora? (ej: 2026-07-15 10:00)'); if(f){ await guardarTexto(); await api('/api/publicaciones/'+p.id,{method:'PATCH',body:JSON.stringify({accion:'programar',fecha:f})}); toast('Programado'); cargar(); } };
+  if (p.estado!=='publicado') {
+    const b = el('<button class="btn warn mini">📅 '+(p.estado==='programado'?'Reprogramar':'Programar')+'</button>');
+    b.onclick = async () => { const f = $('.p-fecha',item).value; if(!f) return toast('Elige fecha y hora arriba'); await guardarTexto(); await api('/api/publicaciones/'+p.id,{method:'PATCH',body:JSON.stringify({accion:'programar',fecha:f})}); toast('Programado ✅ Se publicará solo'); cargar(); };
     acc.appendChild(b);
   }
   if (p.estado!=='publicado') {
@@ -262,6 +266,16 @@ async function renderAprobaciones() {
     b.className = 'badge ' + (m.ok ? 'on' : 'off');
     $('#meta-detalle', metaCard).textContent = m.detalle;
   }).catch(()=>{});
+
+  const progCard = el(`<div class="card"><div class="flex-b"><h3>🤖 Programador automático</h3><span class="badge on" id="prog-badge">…</span></div><div class="muted" id="prog-detalle" style="margin-top:6px"></div></div>`);
+  c.appendChild(progCard);
+  api('/api/programador/estado').then(s => {
+    $('#prog-badge', progCard).textContent = s.activo ? 'Activo ✅' : 'Detenido';
+    $('#prog-detalle', progCard).textContent =
+      `Revisa cada ${Math.round(s.intervaloMs/1000)}s · ${s.programadas} programada(s)` +
+      (s.fallidas?` · ${s.fallidas} fallida(s)`:'') +
+      '. Las publicaciones aprobadas y programadas se publican solas a su hora.';
+  }).catch(()=>{});
   const filtroWrap = el(`<div class="card"><div class="flex-b"><h2>Publicaciones</h2>
     <select id="f-estado" style="max-width:200px">
       <option value="">Todos los estados</option>
@@ -269,6 +283,7 @@ async function renderAprobaciones() {
       <option value="aprobado">Aprobados</option>
       <option value="programado">Programados</option>
       <option value="publicado">Publicados</option>
+      <option value="fallido">Fallidos</option>
     </select></div></div>`);
   c.appendChild(filtroWrap);
   const cont = el('<div></div>'); c.appendChild(cont);
@@ -348,6 +363,14 @@ function tarjetaMensaje(m) {
 }
 
 cargar();
+
+// Auto-actualiza cada 20s para reflejar publicaciones automaticas,
+// sin molestar si estas escribiendo en un campo.
+setInterval(() => {
+  const a = document.activeElement;
+  if (a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName)) return;
+  cargar();
+}, 20000);
 </script>
 </body>
 </html>

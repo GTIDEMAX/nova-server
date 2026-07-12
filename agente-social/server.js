@@ -8,6 +8,7 @@ const path = require('path');
 const { estado, guardar, id } = require('./store');
 const ia = require('./ia');
 const adapters = require('./adapters');
+const scheduler = require('./scheduler');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -67,6 +68,11 @@ async function manejarAPI(req, res, ruta) {
   // Estado de conexion con Meta (Instagram + Facebook)
   if (recurso === 'meta' && partes[2] === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, await adapters.verificarMeta());
+  }
+
+  // Estado del programador automatico
+  if (recurso === 'programador' && partes[2] === 'estado' && req.method === 'GET') {
+    return enviarJSON(res, 200, scheduler.estadoScheduler());
   }
 
   // ----- Empresas -----
@@ -146,6 +152,8 @@ async function manejarAPI(req, res, ruta) {
       if (body.accion === 'programar') {
         pub.estado = 'programado';
         pub.fechaProgramada = body.fecha || null;
+        pub.intentos = 0;
+        pub.ultimoError = null;
       }
       guardar();
       return enviarJSON(res, 200, pub);
@@ -254,4 +262,5 @@ server.listen(PORT, () => {
   console.log('  AGENTE SOCIAL en http://localhost:' + PORT);
   console.log('  IA con Claude: ' + (ia.hayClave ? 'ACTIVA (' + ia.MODELO + ')' : 'MODO DEMO (define ANTHROPIC_API_KEY)'));
   console.log('====================================================');
+  scheduler.iniciar();
 });

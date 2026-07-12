@@ -79,13 +79,28 @@ agente-social/
 └── .env.example     # Variables de entorno
 ```
 
+## Programador automático 🤖
+
+El servidor incluye un **programador** que revisa las publicaciones periódicamente y publica solo las que están **programadas** cuando llega su fecha/hora — sin que tengas que estar pendiente.
+
+- En la pestaña **Publicaciones**, elige fecha y hora en el campo "Programar para" y pulsa **Programar**.
+- El programador publica automáticamente a esa hora (usando el adaptador de la plataforma).
+- Si una publicación falla, reintenta hasta 3 veces y luego la marca como **fallida** para que la revises.
+- Intervalo configurable con `SCHEDULER_INTERVAL_MS` (por defecto 60000 = 1 minuto).
+
+```bash
+# Ejemplo: revisar cada 30 segundos
+export SCHEDULER_INTERVAL_MS=30000
+npm start
+```
+
+> El estado del programador (activo, cada cuánto revisa, cuántas hay programadas) se muestra en la parte superior de la pestaña Publicaciones.
+
 ## Autonomía (mixta, como pediste)
 
 - **Contenido** → siempre pasa por tu aprobación antes de publicarse.
 - **Respuestas a clientes** → la IA redacta, tú apruebas y envías.
-- **Programar/publicar** → lo decides tú por publicación.
-
-Cuando quieras, se puede activar modo totalmente automático por tarea (por ejemplo, auto-publicar lo ya aprobado a la hora programada).
+- **Programar/publicar** → tú apruebas y eliges la hora; el programador lo publica solo a esa hora (automático por tarea).
 
 ## Próximos pasos sugeridos
 
