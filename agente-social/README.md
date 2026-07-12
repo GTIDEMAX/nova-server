@@ -33,17 +33,39 @@ npm start
 
 A partir de ahí, los textos de publicaciones y las respuestas a clientes los genera Claude (`claude-opus-4-8`).
 
-## Conectar tus redes de verdad
+## Conectar Instagram + Facebook (Meta) — ¡ya implementado!
 
-Publicar en Instagram/Facebook/LinkedIn/TikTok o enviar por WhatsApp requiere **cuentas de empresa y tokens** de cada plataforma. Copia `.env.example` a `.env`, rellena los tokens que tengas, y completa las llamadas marcadas con `TODO` en `adapters.js`. Cada plataforma:
+La publicación real en Meta ya está lista. Solo necesitas configurar 3 variables:
+
+```bash
+export META_ACCESS_TOKEN="EAAG..."   # token de página (long-lived)
+export META_PAGE_ID="123456789"       # id de tu página de Facebook
+export META_IG_USER_ID="178414..."    # id de tu cuenta de Instagram Business
+```
+
+### Cómo obtener las credenciales de Meta
+
+1. Crea una app en **developers.facebook.com** (tipo Business).
+2. Conecta una **página de Facebook** con una **cuenta de Instagram Business/Creator**.
+3. Pide los permisos: `pages_manage_posts`, `pages_read_engagement`, `instagram_basic`, `instagram_content_publish`.
+4. Genera un **token de página de larga duración** (`META_ACCESS_TOKEN`).
+5. Obtén el **id de la página** (`META_PAGE_ID`) y el **id de Instagram** (`META_IG_USER_ID`) desde la Graph API Explorer.
+
+Cuando arranques con estas variables, la pestaña **Publicaciones** mostrará *"Conectado ✅"* y el botón **Publicar ahora** publicará de verdad.
+
+> ⚠️ **Instagram exige una imagen** (no permite posts solo de texto). En cada publicación de Instagram, pega la **URL de una imagen pública** en el campo correspondiente. Facebook sí permite texto solo (o texto + imagen).
+
+## Otras plataformas (pendientes de conectar)
 
 | Plataforma          | Qué necesitas                                   |
 |---------------------|-------------------------------------------------|
-| Instagram / Facebook| Meta Graph API + cuenta business (`META_ACCESS_TOKEN`) |
+| Instagram / Facebook| ✅ **Listo** — Meta Graph API (`META_ACCESS_TOKEN`, `META_PAGE_ID`, `META_IG_USER_ID`) |
 | LinkedIn            | LinkedIn Marketing API (`LINKEDIN_ACCESS_TOKEN`)|
 | TikTok             | TikTok Content Posting API (`TIKTOK_ACCESS_TOKEN`) — requiere video |
 | Web / blog         | Un webhook en tu sitio (`WEB_PUBLISH_WEBHOOK`)  |
 | WhatsApp           | WhatsApp Cloud API (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`) |
+
+Para LinkedIn, TikTok y WhatsApp, completa las llamadas marcadas con `TODO` en `adapters.js`.
 
 ## Estructura
 

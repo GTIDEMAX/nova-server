@@ -64,6 +64,11 @@ async function manejarAPI(req, res, ruta) {
     return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO });
   }
 
+  // Estado de conexion con Meta (Instagram + Facebook)
+  if (recurso === 'meta' && partes[2] === 'estado' && req.method === 'GET') {
+    return enviarJSON(res, 200, await adapters.verificarMeta());
+  }
+
   // ----- Empresas -----
   if (recurso === 'empresas') {
     if (req.method === 'POST') {
@@ -107,6 +112,7 @@ async function manejarAPI(req, res, ruta) {
           plataforma: body.plataforma || 'instagram',
           texto: idea.texto,
           hashtags: idea.hashtags || [],
+          imagenUrl: '',
           estado: 'borrador',
           fechaProgramada: null,
           creado: new Date().toISOString(),
@@ -134,6 +140,7 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'PATCH') {
       // Editar texto, aprobar o programar
       if (typeof body.texto === 'string') pub.texto = body.texto;
+      if (typeof body.imagenUrl === 'string') pub.imagenUrl = body.imagenUrl;
       if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags;
       if (body.accion === 'aprobar') pub.estado = 'aprobado';
       if (body.accion === 'programar') {
@@ -146,8 +153,10 @@ async function manejarAPI(req, res, ruta) {
     if (partes[3] === 'publicar' && req.method === 'POST') {
       const empresa = buscar('empresas', pub.empresaId);
       const resultado = await adapters.publicar(pub.plataforma, pub, empresa);
-      pub.estado = 'publicado';
-      pub.publicado = new Date().toISOString();
+      if (resultado.ok) {
+        pub.estado = 'publicado';
+        pub.publicado = new Date().toISOString();
+      }
       pub.resultadoPublicacion = resultado;
       guardar();
       return enviarJSON(res, 200, { publicacion: pub, resultado });

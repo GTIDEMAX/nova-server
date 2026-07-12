@@ -218,12 +218,14 @@ function tarjetaPublicacion(p) {
     </div>
     <textarea class="p-texto">${esc(p.texto)}</textarea>
     <div class="chips">${(p.hashtags||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join('')}</div>
+    <label>URL de imagen ${(p.plataforma==='instagram')?'<small class="hs">(obligatoria en Instagram)</small>':'(opcional)'}</label>
+    <input class="p-img" placeholder="https://…/imagen.jpg" value="${esc(p.imagenUrl||'')}">
     <div class="acciones"></div>
     ${p.fechaProgramada?`<div class="muted" style="margin-top:6px">📅 Programado: ${esc(p.fechaProgramada)}</div>`:''}
-    ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
+    ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${!p.resultadoPublicacion.ok?'🔴 ':p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
   </div>`);
   const acc = $('.acciones', item);
-  const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value})});
+  const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value, imagenUrl: $('.p-img',item).value})});
 
   const bGuardar = el('<button class="btn sec mini">Guardar cambios</button>');
   bGuardar.onclick = async () => { await guardarTexto(); toast('Guardado'); };
@@ -241,7 +243,7 @@ function tarjetaPublicacion(p) {
   }
   if (p.estado!=='publicado') {
     const b = el('<button class="btn mini">🚀 Publicar ahora</button>');
-    b.onclick = async () => { await guardarTexto(); const r = await api('/api/publicaciones/'+p.id+'/publicar',{method:'POST'}); toast(r.resultado.simulado?'Publicado (modo simulado)':'Publicado'); cargar(); };
+    b.onclick = async () => { await guardarTexto(); const r = await api('/api/publicaciones/'+p.id+'/publicar',{method:'POST'}); toast(r.resultado.ok ? (r.resultado.simulado?'Publicado (modo simulado)':'Publicado ✅') : ('⚠️ '+(r.resultado.nota||'Error'))); cargar(); };
     acc.appendChild(b);
   }
   const bDel = el('<button class="btn danger mini">Eliminar</button>');
@@ -250,8 +252,16 @@ function tarjetaPublicacion(p) {
   return item;
 }
 
-function renderAprobaciones() {
+async function renderAprobaciones() {
   const c = $('#tab-aprobaciones'); c.innerHTML = '';
+  const metaCard = el(`<div class="card"><div class="flex-b"><h3>📡 Conexión con Meta (Instagram + Facebook)</h3><span class="badge" id="meta-badge">comprobando…</span></div><div class="muted" id="meta-detalle" style="margin-top:6px"></div></div>`);
+  c.appendChild(metaCard);
+  api('/api/meta/estado').then(m => {
+    const b = $('#meta-badge', metaCard);
+    b.textContent = m.ok ? 'Conectado ✅' : (m.configurado ? 'Con error' : 'Modo simulado');
+    b.className = 'badge ' + (m.ok ? 'on' : 'off');
+    $('#meta-detalle', metaCard).textContent = m.detalle;
+  }).catch(()=>{});
   const filtroWrap = el(`<div class="card"><div class="flex-b"><h2>Publicaciones</h2>
     <select id="f-estado" style="max-width:200px">
       <option value="">Todos los estados</option>
