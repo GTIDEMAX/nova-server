@@ -113,6 +113,18 @@ Solo aparecen las publicaciones en estado **publicado** (crea contenido para la 
 
 > Para publicar en internet real (no solo localhost), despliega el servidor en un hosting con Node.js (Render, Railway, un VPS, etc.) y usa esa URL pública en el `<iframe>`.
 
+## Reportes 📊
+
+La pestaña **Reportes** muestra un tablero con:
+
+- **Resumen** (stat tiles): empresas, contenido creado, publicadas, programadas, mensajes recibidos, sin responder y tasa de respuesta.
+- **Publicaciones de los últimos 7 días** (mini gráfico de barras).
+- **Publicadas por plataforma** y **estado del contenido**.
+- **Mensajes por canal** y **actividad por empresa**.
+- **Descargar reporte** en `.txt` con un clic.
+
+Puedes filtrar por empresa o ver todas juntas. Las métricas de **alcance/likes** de cada red aparecerán aquí cuando conectes las cuentas (Meta, etc.).
+
 ## Autonomía (mixta, como pediste)
 
 - **Contenido** → siempre pasa por tu aprobación antes de publicarse.

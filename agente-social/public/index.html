@@ -57,6 +57,23 @@
   .toast.show { opacity: 1; }
   .flex-b { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
   small.hs { color: var(--acc2); }
+  /* Reportes: stat tiles + barras */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 12px; }
+  .tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .tile .n { font-size: 30px; font-weight: 800; line-height: 1.1; }
+  .tile .l { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .tile .n.ok { color: var(--ok); } .tile .n.warn { color: var(--warn); } .tile .n.acc { color: #8f86ff; }
+  .bars { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
+  .bar-row .cap { color: var(--muted); text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { background: var(--panel2); border-radius: 6px; height: 16px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--acc); border-radius: 6px; min-width: 3px; }
+  .bar-row .val { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .spark { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 8px; }
+  .spark .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; justify-content: flex-end; }
+  .spark .sb { width: 100%; max-width: 34px; background: var(--acc2); border-radius: 5px 5px 0 0; min-height: 3px; }
+  .spark .sl { font-size: 10px; color: var(--muted); }
+  .spark .sv { font-size: 11px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -73,6 +90,7 @@
   <button data-tab="aprobaciones">📅 Publicaciones</button>
   <button data-tab="atencion">💬 Atención al cliente</button>
   <button data-tab="web">🌐 Mi web</button>
+  <button data-tab="reportes">📊 Reportes</button>
 </nav>
 
 <main>
@@ -81,6 +99,7 @@
   <section id="tab-aprobaciones" hidden></section>
   <section id="tab-atencion" hidden></section>
   <section id="tab-web" hidden></section>
+  <section id="tab-reportes" hidden></section>
 </main>
 
 <div id="toast" class="toast"></div>
@@ -116,7 +135,7 @@ let tab = 'empresas';
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===btn));
-  ['empresas','contenido','aprobaciones','atencion','web'].forEach(t => $('#tab-'+t).hidden = t!==tab);
+  ['empresas','contenido','aprobaciones','atencion','web','reportes'].forEach(t => $('#tab-'+t).hidden = t!==tab);
   render();
 });
 
@@ -126,6 +145,7 @@ function render() {
   if (tab==='aprobaciones') renderAprobaciones();
   if (tab==='atencion') renderAtencion();
   if (tab==='web') renderWeb();
+  if (tab==='reportes') renderReportes();
 }
 
 // ---------- EMPRESAS ----------
@@ -405,6 +425,115 @@ function renderWeb() {
   };
   $('#w-emp', card).onchange = pintar;
   pintar();
+}
+
+// ---------- REPORTES ----------
+function barras(cont, datos) {
+  // datos: [[etiqueta, valor], ...] — barras de una sola tonalidad con etiqueta directa
+  const max = Math.max(1, ...datos.map(d => d[1]));
+  const wrap = el('<div class="bars"></div>');
+  if (!datos.length) { cont.appendChild(el('<div class="muted">Sin datos todavía.</div>')); return; }
+  datos.forEach(([cap, val]) => {
+    const row = el(`<div class="bar-row"><span class="cap">${esc(cap)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(val/max*100)}%"></div></div><span class="val">${val}</span></div>`);
+    wrap.appendChild(row);
+  });
+  cont.appendChild(wrap);
+}
+
+async function renderReportes() {
+  const c = $('#tab-reportes'); c.innerHTML = '';
+  const head = el(`<div class="card"><div class="flex-b"><h2>Reportes</h2>
+    <select id="r-emp" style="max-width:220px">
+      <option value="">Todas las empresas</option>
+      ${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}
+    </select></div></div>`);
+  c.appendChild(head);
+  const cont = el('<div></div>'); c.appendChild(cont);
+
+  const pintar = async () => {
+    const eid = $('#r-emp', head).value;
+    const m = await api('/api/metricas' + (eid?('?empresaId='+eid):''));
+    cont.innerHTML = '';
+
+    // KPIs
+    const kpis = el('<div class="card"><h3>Resumen</h3><div class="tiles"></div></div>');
+    const tiles = $('.tiles', kpis);
+    const tile = (n, l, cls) => el(`<div class="tile"><div class="n ${cls||''}">${n}</div><div class="l">${l}</div></div>`);
+    if (!eid) tiles.appendChild(tile(m.empresas, 'Empresas'));
+    tiles.appendChild(tile(m.publicaciones.publicado, 'Publicadas', 'ok'));
+    tiles.appendChild(tile(m.publicaciones.programado, 'Programadas', 'acc'));
+    tiles.appendChild(tile(m.publicaciones.total, 'Contenido creado'));
+    tiles.appendChild(tile(m.mensajes.total, 'Mensajes recibidos'));
+    tiles.appendChild(tile(m.mensajes.pendientes, 'Sin responder', m.mensajes.pendientes?'warn':'ok'));
+    tiles.appendChild(tile(m.mensajes.porcentajeRespuesta+'%', 'Tasa de respuesta', 'ok'));
+    if (m.publicaciones.fallido) tiles.appendChild(tile(m.publicaciones.fallido, 'Fallidas', 'warn'));
+    cont.appendChild(kpis);
+
+    // Actividad 7 días
+    const act = el('<div class="card"><h3>Publicaciones (últimos 7 días)</h3><div class="spark"></div></div>');
+    const sp = $('.spark', act);
+    const maxA = Math.max(1, ...m.actividad7dias.map(d=>d.publicadas));
+    m.actividad7dias.forEach(d => {
+      sp.appendChild(el(`<div class="col"><span class="sv">${d.publicadas||''}</span><div class="sb" style="height:${Math.round(d.publicadas/maxA*70)}px" title="${d.publicadas}"></div><span class="sl">${esc(d.fecha)}</span></div>`));
+    });
+    cont.appendChild(act);
+
+    // Publicadas por plataforma
+    const plat = el('<div class="card"><h3>Publicadas por plataforma</h3></div>');
+    barras(plat, Object.entries(m.porPlataforma).sort((a,b)=>b[1]-a[1]));
+    cont.appendChild(plat);
+
+    // Estado del contenido
+    const est = el('<div class="card"><h3>Estado del contenido</h3></div>');
+    const P = m.publicaciones;
+    barras(est, [['borrador',P.borrador],['aprobado',P.aprobado],['programado',P.programado],['publicado',P.publicado],['fallido',P.fallido]].filter(x=>x[1]>0));
+    cont.appendChild(est);
+
+    // Mensajes por canal
+    const can = el('<div class="card"><h3>Mensajes por canal</h3></div>');
+    barras(can, Object.entries(m.porCanal).sort((a,b)=>b[1]-a[1]));
+    cont.appendChild(can);
+
+    // Por empresa (solo vista general)
+    if (!eid && m.porEmpresa.length) {
+      const pe = el('<div class="card"><h3>Actividad por empresa (publicaciones)</h3></div>');
+      barras(pe, m.porEmpresa.map(e=>[e.nombre, e.publicadas]).sort((a,b)=>b[1]-a[1]));
+      cont.appendChild(pe);
+    }
+
+    // Descargar reporte
+    const dl = el('<div class="card"><button class="btn sec" id="r-dl">⬇️ Descargar reporte (.txt)</button> <span class="muted">Las métricas de alcance/likes aparecerán aquí cuando conectes las cuentas de cada red.</span></div>');
+    cont.appendChild(dl);
+    $('#r-dl', dl).onclick = () => descargarReporte(eid ? nombreEmpresa(eid) : 'Todas las empresas', m);
+  };
+  $('#r-emp', head).onchange = pintar;
+  pintar();
+}
+
+function descargarReporte(titulo, m) {
+  const L = [];
+  L.push('REPORTE — ' + titulo);
+  L.push('Generado: ' + new Date().toLocaleString('es'));
+  L.push('');
+  L.push('CONTENIDO');
+  L.push('  Total creado: ' + m.publicaciones.total);
+  L.push('  Publicadas: ' + m.publicaciones.publicado);
+  L.push('  Programadas: ' + m.publicaciones.programado);
+  L.push('  Borradores: ' + m.publicaciones.borrador);
+  L.push('  Fallidas: ' + m.publicaciones.fallido);
+  L.push('');
+  L.push('PUBLICADAS POR PLATAFORMA');
+  Object.entries(m.porPlataforma).forEach(([k,v])=>L.push('  '+k+': '+v));
+  L.push('');
+  L.push('ATENCIÓN AL CLIENTE');
+  L.push('  Mensajes recibidos: ' + m.mensajes.total);
+  L.push('  Respondidos: ' + m.mensajes.respondidos);
+  L.push('  Pendientes: ' + m.mensajes.pendientes);
+  L.push('  Tasa de respuesta: ' + m.mensajes.porcentajeRespuesta + '%');
+  const blob = new Blob([L.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'reporte-'+titulo.replace(/\s+/g,'_')+'.txt'; a.click();
+  toast('Reporte descargado');
 }
 
 cargar();

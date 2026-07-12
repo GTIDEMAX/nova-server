@@ -76,6 +76,12 @@ async function manejarAPI(req, res, ruta) {
     return enviarJSON(res, 200, scheduler.estadoScheduler());
   }
 
+  // Metricas y reportes
+  if (recurso === 'metricas' && req.method === 'GET') {
+    const q = new URLSearchParams((req.url.split('?')[1] || ''));
+    return enviarJSON(res, 200, computarMetricas(q.get('empresaId') || ''));
+  }
+
   // ----- Empresas -----
   if (recurso === 'empresas') {
     if (req.method === 'POST') {
@@ -242,6 +248,62 @@ async function manejarAPI(req, res, ruta) {
   }
 
   return enviarJSON(res, 404, { error: 'Ruta no encontrada' });
+}
+
+// ---------- metricas ----------
+function computarMetricas(empresaId) {
+  const pubs = empresaId ? estado.publicaciones.filter((p) => p.empresaId === empresaId) : estado.publicaciones;
+  const msgs = empresaId ? estado.mensajes.filter((m) => m.empresaId === empresaId) : estado.mensajes;
+
+  const contar = (arr, campo) => arr.reduce((acc, x) => { const k = x[campo] || 'otro'; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+
+  const porEstado = contar(pubs, 'estado');
+  const publicadas = pubs.filter((p) => p.estado === 'publicado');
+  const porPlataforma = contar(publicadas, 'plataforma');
+  const respondidos = msgs.filter((m) => m.estado === 'respondido').length;
+
+  // Actividad de los ultimos 7 dias (publicaciones publicadas por dia)
+  const dias = [];
+  const hoy = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(hoy);
+    d.setDate(hoy.getDate() - i);
+    const clave = d.toISOString().slice(0, 10);
+    const etiqueta = d.toLocaleDateString('es', { weekday: 'short', day: 'numeric' });
+    const cuenta = publicadas.filter((p) => (p.publicado || p.creado || '').slice(0, 10) === clave).length;
+    dias.push({ fecha: etiqueta, publicadas: cuenta });
+  }
+
+  // Resumen por empresa (solo en vista general)
+  const porEmpresa = empresaId
+    ? []
+    : estado.empresas.map((e) => ({
+        nombre: e.nombre,
+        publicadas: estado.publicaciones.filter((p) => p.empresaId === e.id && p.estado === 'publicado').length,
+        mensajes: estado.mensajes.filter((m) => m.empresaId === e.id).length,
+      }));
+
+  return {
+    empresas: empresaId ? 1 : estado.empresas.length,
+    publicaciones: {
+      total: pubs.length,
+      borrador: porEstado.borrador || 0,
+      aprobado: porEstado.aprobado || 0,
+      programado: porEstado.programado || 0,
+      publicado: porEstado.publicado || 0,
+      fallido: porEstado.fallido || 0,
+    },
+    porPlataforma,
+    mensajes: {
+      total: msgs.length,
+      pendientes: msgs.filter((m) => m.estado === 'pendiente').length,
+      respondidos,
+      porcentajeRespuesta: msgs.length ? Math.round((respondidos / msgs.length) * 100) : 0,
+    },
+    porCanal: contar(msgs, 'canal'),
+    actividad7dias: dias,
+    porEmpresa,
+  };
 }
 
 // ---------- feed publico + widget para la web del cliente ----------
