@@ -134,6 +134,8 @@ async function cargar() {
     db.textContent = S.datos === 'mongo' ? '💾 Datos guardados' : '⚠️ Datos temporales';
     db.className = 'badge ' + (S.datos === 'mongo' ? 'on' : 'off');
     db.title = S.datos === 'mongo' ? 'Conectado a MongoDB: no se pierde nada' : 'Sin base de datos: se borra al reiniciar el servidor';
+    db.style.cursor = 'pointer';
+    db.onclick = () => alert(S.datos === 'mongo' ? '💾 Base de datos MongoDB conectada. Tus datos ya no se borran.' : '⚠️ Los datos son temporales.\n\nMotivo: ' + (S.datosMotivo || 'desconocido'));
   }
   $('#empBadge').textContent = S.empresas.length + ' empresa' + (S.empresas.length===1?'':'s');
   render();

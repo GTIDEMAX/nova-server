@@ -19,6 +19,7 @@ const estado = JSON.parse(JSON.stringify(ESTADO_INICIAL));
 
 let modo = 'archivo';
 let coleccion = null;
+let motivo = MONGODB_URI ? '' : 'Falta la variable MONGODB_URI en Render (Environment).';
 
 function aplicar(doc) {
   estado.empresas = doc.empresas || [];
@@ -49,6 +50,8 @@ async function iniciar() {
       return;
     } catch (e) {
       console.error('[store] No se pudo conectar a MongoDB, uso archivo local:', e.message);
+      // Nunca mostrar la contrasena: se tapa cualquier "usuario:clave@" del mensaje
+      motivo = 'No se pudo conectar a MongoDB: ' + String(e.message || e).replace(/\/\/[^@\s]*@/g, '//***@').slice(0, 300);
     }
   }
   // Modo archivo
@@ -78,4 +81,4 @@ function id() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-module.exports = { estado, guardar, id, iniciar, get modo() { return modo; } };
+module.exports = { estado, guardar, id, iniciar, get modo() { return modo; }, get motivo() { return modo === 'mongo' ? '' : motivo; } };
