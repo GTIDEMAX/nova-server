@@ -208,8 +208,28 @@ function renderEmpresas() {
       <div class="muted">Tono: ${esc(e.tono)} · Público: ${esc(e.publico||'—')}</div>
       <div class="chips">${(e.plataformas||[]).map(p=>`<span class="chip sel">${p}</span>`).join('') || '<span class="muted">sin plataformas</span>'}</div>
       ${e.autoResponder?'<div class="muted" style="margin-top:6px">🤖 Auto-respuesta de WhatsApp activada</div>':''}
-      <div class="acciones"><button class="btn danger mini">Eliminar</button></div>
+      <div class="muted meta-con" style="margin-top:6px">${e.metaPageId
+        ? `📡 Publica en: <b>Facebook ${esc(e.metaPageNombre||e.metaPageId)}</b>${e.metaIgId ? ` · <b>Instagram @${esc(e.metaIgUsuario||e.metaIgId)}</b>` : ' · <span style="color:var(--warn)">sin Instagram ligado</span>'}`
+        : '📡 Facebook/Instagram: sin conectar (publica de práctica)'}</div>
+      <div class="acciones"><button class="btn sec mini b-meta">📡 ${e.metaPageId?'Cambiar':'Conectar'} Facebook/Instagram</button><button class="btn danger mini">Eliminar</button></div>
     </div>`);
+    $('.b-meta', item).onclick = async () => {
+      let l;
+      try { l = await api('/api/meta/paginas'); } catch (err) { return toast(err.message); }
+      if (!l.ok) return alert('No se pudo leer tus páginas.\n\n' + (l.detalle || ''));
+      if (!l.paginas.length) return alert('Tu token de Meta no tiene páginas. Revisa que el usuario del sistema tenga asignadas tus páginas.');
+      const zona = $('.meta-con', item);
+      zona.innerHTML = '';
+      const sel = el(`<select><option value="">— Sin conectar —</option>${l.paginas.map((p,i)=>`<option value="${i}" ${p.id===e.metaPageId?'selected':''}>${esc(p.nombre)}${p.igUsuario?' · IG @'+esc(p.igUsuario):' · (sin Instagram)'}</option>`).join('')}</select>`);
+      const ok = el('<button class="btn ok mini" style="margin-top:8px">Guardar</button>');
+      ok.onclick = async () => {
+        const p = sel.value === '' ? { id:'', nombre:'', igId:'', igUsuario:'' } : l.paginas[+sel.value];
+        await api('/api/empresas/'+e.id, { method:'PATCH', body: JSON.stringify({ metaPageId:p.id, metaPageNombre:p.nombre, metaIgId:p.igId, metaIgUsuario:p.igUsuario }) });
+        toast(p.id ? 'Conectada a ' + p.nombre + ' ✅' : 'Desconectada'); cargar();
+      };
+      zona.appendChild(el('<div style="margin-bottom:6px">Escoge la página de <b>'+esc(e.nombre)+'</b>:</div>'));
+      zona.appendChild(sel); zona.appendChild(ok);
+    };
     $('.danger', item).onclick = async () => { if(confirm('¿Eliminar '+e.nombre+' y todo su contenido?')){ await api('/api/empresas/'+e.id,{method:'DELETE'}); cargar(); } };
     c.appendChild(item);
   });

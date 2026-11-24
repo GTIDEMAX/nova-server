@@ -44,11 +44,55 @@ async function graph(url, params) {
   return data;
 }
 
-// --- Facebook (publica en el feed de la pagina; permite solo texto o texto+imagen) ---
-async function publicarFacebook(pub) {
+// --- Token de cada pagina ---
+// META_ACCESS_TOKEN puede ser un token de USUARIO DEL SISTEMA (recomendado: sirve para
+// todas tus paginas y no caduca) o un token de una sola pagina. Con el primero se pide
+// a Meta el token de cada pagina; con el segundo se usa tal cual.
+const tokensPagina = new Map();
+async function tokenDePagina(pageId) {
   const token = process.env.META_ACCESS_TOKEN;
-  const pageId = process.env.META_PAGE_ID;
-  if (!token || !pageId) return simulado('facebook', pub, 'Falta META_ACCESS_TOKEN o META_PAGE_ID');
+  if (!token || !pageId) return token;
+  if (tokensPagina.has(pageId)) return tokensPagina.get(pageId);
+  try {
+    const r = await fetch(`${GRAPH}/${pageId}?fields=access_token&access_token=${encodeURIComponent(token)}`);
+    const d = await r.json();
+    const t = d.access_token || token;
+    tokensPagina.set(pageId, t);
+    return t;
+  } catch (e) {
+    return token;
+  }
+}
+
+// Paginas de Facebook (y su Instagram) a las que tiene acceso el token. Para el panel.
+async function listarPaginasMeta() {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) return { ok: false, paginas: [], detalle: 'Falta META_ACCESS_TOKEN en Render.' };
+  const campos = 'id,name,instagram_business_account{id,username}';
+  const norm = (p) => ({
+    id: p.id, nombre: p.name,
+    igId: p.instagram_business_account ? p.instagram_business_account.id : '',
+    igUsuario: p.instagram_business_account ? p.instagram_business_account.username || '' : '',
+  });
+  try {
+    const r = await fetch(`${GRAPH}/me/accounts?fields=${encodeURIComponent(campos)}&limit=100&access_token=${encodeURIComponent(token)}`);
+    const d = await r.json();
+    if (!d.error) return { ok: true, paginas: (d.data || []).map(norm) };
+    // Si el token es de una sola pagina, /me ES la pagina
+    const r2 = await fetch(`${GRAPH}/me?fields=${encodeURIComponent(campos)}&access_token=${encodeURIComponent(token)}`);
+    const d2 = await r2.json();
+    if (d2.error) throw new Error(d.error.message);
+    return { ok: true, paginas: [norm(d2)] };
+  } catch (e) {
+    return { ok: false, paginas: [], detalle: 'Meta respondió: ' + e.message };
+  }
+}
+
+// --- Facebook (publica en el feed de la pagina; permite solo texto o texto+imagen) ---
+async function publicarFacebook(pub, empresa) {
+  const pageId = (empresa && empresa.metaPageId) || process.env.META_PAGE_ID;
+  if (!process.env.META_ACCESS_TOKEN || !pageId) return simulado('facebook', pub, 'Falta conectar la página de Facebook de esta empresa');
+  const token = await tokenDePagina(pageId);
   try {
     let data;
     if (pub.imagenUrl) {
@@ -63,10 +107,10 @@ async function publicarFacebook(pub) {
 }
 
 // --- Instagram (requiere imagen; proceso de 2 pasos: crear contenedor + publicar) ---
-async function publicarInstagram(pub) {
-  const token = process.env.META_ACCESS_TOKEN;
-  const igId = process.env.META_IG_USER_ID;
-  if (!token || !igId) return simulado('instagram', pub, 'Falta META_ACCESS_TOKEN o META_IG_USER_ID');
+async function publicarInstagram(pub, empresa) {
+  const igId = (empresa && empresa.metaIgId) || process.env.META_IG_USER_ID;
+  if (!process.env.META_ACCESS_TOKEN || !igId) return simulado('instagram', pub, 'Falta conectar el Instagram de esta empresa');
+  const token = (empresa && empresa.metaPageId) ? await tokenDePagina(empresa.metaPageId) : process.env.META_ACCESS_TOKEN;
   if (!pub.imagenUrl) {
     return { ok: false, simulado: false, plataforma: 'instagram', error: 'sin_imagen',
       nota: 'Instagram requiere una imagen: agrega la URL de una imagen a esta publicacion.' };
@@ -107,8 +151,14 @@ async function verificarMeta() {
       if (d.error) throw new Error(d.error.message);
       partes.push('Instagram: @' + d.username);
     }
+    if (!partes.length) {
+      const l = await listarPaginasMeta();
+      if (!l.ok) throw new Error(l.detalle);
+      partes.push(`Conectado ✅ · ${l.paginas.length} página(s) disponibles. En Empresas escoge la página de cada marca.`);
+      estado.facebook = estado.instagram = l.paginas.length > 0;
+    }
     estado.ok = true;
-    estado.detalle = partes.join(' · ') || 'Token presente, pero falta META_PAGE_ID / META_IG_USER_ID.';
+    estado.detalle = partes.join(' · ');
   } catch (e) {
     estado.detalle = 'Error de conexion con Meta: ' + e.message;
   }
@@ -239,4 +289,4 @@ function simulado(plataforma, pub, motivo) {
   };
 }
 
-module.exports = { publicar, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };
+module.exports = { publicar, listarPaginasMeta, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };

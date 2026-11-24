@@ -86,6 +86,11 @@ async function manejarAPI(req, res, ruta) {
     return enviarJSON(res, 200, await adapters.verificarMeta());
   }
 
+  // Paginas de Facebook/Instagram disponibles (para conectar cada empresa)
+  if (recurso === 'meta' && partes[2] === 'paginas' && req.method === 'GET') {
+    return enviarJSON(res, 200, await adapters.listarPaginasMeta());
+  }
+
   // Estado de conexion con WhatsApp
   if (recurso === 'whatsapp' && partes[2] === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, await adapters.verificarWhatsApp());
@@ -220,6 +225,16 @@ async function manejarAPI(req, res, ruta) {
       estado.empresas.push(empresa);
       guardar();
       return enviarJSON(res, 201, empresa);
+    }
+    if (req.method === 'PATCH' && partes[2]) {
+      const e = buscar('empresas', partes[2]);
+      if (!e) return enviarJSON(res, 404, { error: 'Empresa no encontrada' });
+      const campos = ['nombre', 'rubro', 'tono', 'publico', 'whatsappPhoneId', 'metaPageId', 'metaPageNombre', 'metaIgId', 'metaIgUsuario'];
+      for (const k of campos) if (typeof body[k] === 'string') e[k] = body[k].trim();
+      if (Array.isArray(body.plataformas)) e.plataformas = body.plataformas;
+      if (typeof body.autoResponder === 'boolean') e.autoResponder = body.autoResponder;
+      guardar();
+      return enviarJSON(res, 200, e);
     }
     if (req.method === 'DELETE' && partes[2]) {
       estado.empresas = estado.empresas.filter((e) => e.id !== partes[2]);

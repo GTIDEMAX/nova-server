@@ -59,6 +59,12 @@ Cuando arranques con estas variables, la pestaña **Publicaciones** mostrará *"
 
 > ⚠️ **Instagram exige una imagen** (no permite posts solo de texto). En cada publicación de Instagram, pega la **URL de una imagen pública** en el campo correspondiente. Facebook sí permite texto solo (o texto + imagen).
 
+### Varias marcas (cada empresa en su página)
+
+Con un **token de usuario del sistema** de Meta Business en `META_ACCESS_TOKEN` (sirve para todas tus páginas y no caduca), en **Empresas** cada marca tiene el botón **📡 Conectar Facebook/Instagram**: escoges su página de la lista y su Instagram ligado se conecta solo. Ya no hace falta `META_PAGE_ID` / `META_IG_USER_ID` (se siguen usando como respaldo si una empresa no tiene página elegida).
+
+Permisos del token: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`, `business_management`.
+
 ## Otras plataformas (pendientes de conectar)
 
 | Plataforma          | Qué necesitas                                   |
