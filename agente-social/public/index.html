@@ -82,6 +82,7 @@
   <h1>Agente Social</h1>
   <span id="iaBadge" class="badge">IA…</span>
   <span class="badge" id="empBadge">0 empresas</span>
+  <span class="badge" id="dbBadge">…</span>
 </header>
 
 <nav>
@@ -128,6 +129,12 @@ async function cargar() {
   const b = $('#iaBadge');
   b.textContent = S.iaActiva ? 'IA activa · '+S.modelo : 'Modo demo (sin ANTHROPIC_API_KEY)';
   b.className = 'badge ' + (S.iaActiva ? 'on' : 'off');
+  const db = $('#dbBadge');
+  if (db) {
+    db.textContent = S.datos === 'mongo' ? '💾 Datos guardados' : '⚠️ Datos temporales';
+    db.className = 'badge ' + (S.datos === 'mongo' ? 'on' : 'off');
+    db.title = S.datos === 'mongo' ? 'Conectado a MongoDB: no se pierde nada' : 'Sin base de datos: se borra al reiniciar el servidor';
+  }
   $('#empBadge').textContent = S.empresas.length + ' empresa' + (S.empresas.length===1?'':'s');
   render();
 }

@@ -78,7 +78,7 @@ async function manejarAPI(req, res, ruta) {
 
   // Estado general (todo lo que necesita el panel)
   if (recurso === 'estado' && req.method === 'GET') {
-    return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO, imagenActiva: imagen.hayImagen });
+    return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO, imagenActiva: imagen.hayImagen, datos: store.modo });
   }
 
   // Estado de conexion con Meta (Instagram + Facebook)
