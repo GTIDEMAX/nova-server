@@ -39,18 +39,63 @@ function enviarJSON(res, code, obj) {
   res.end(body);
 }
 
-function leerBody(req) {
-  return new Promise((resolve) => {
-    let data = '';
-    req.on('data', (c) => (data += c));
-    req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch (e) {
-        resolve({});
-      }
+const MAX_BODY = 15 * 1024 * 1024; // una foto de 10 MB en base64 ocupa ~13.4 MB
+
+function leerCrudo(req) {
+  return new Promise((resolve, reject) => {
+    const trozos = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total <= MAX_BODY) return trozos.push(c);
+      reject(new Error('Contenido demasiado grande'));
+      req.destroy();
     });
+    req.on('end', () => resolve(Buffer.concat(trozos)));
+    req.on('error', reject);
   });
+}
+
+function parsearBody(crudo) {
+  try { return JSON.parse(crudo.toString('utf8')) || {}; } catch (e) { return {}; }
+}
+
+async function leerBody(req) {
+  return parsearBody(await leerCrudo(req));
+}
+
+// ---------- acceso ----------
+const hash = (t) => crypto.createHash('sha256').update(t).digest();
+const igual = (a, b) => crypto.timingSafeEqual(hash(a), hash(b));
+
+// Rutas que deben abrir sin contrasena: Meta descarga las fotos, las webs leen feed/widget,
+// el webhook se valida con firma y el bot con su propio token.
+function esPublica(ruta) {
+  if (ruta.includes('..')) return false;
+  return ruta === '/webhook/whatsapp' || /^\/(feed|widget|uploads|generated)\//.test(ruta) || /^\/api\/bot\//.test(ruta);
+}
+
+// Devuelve true si puede pasar; si no, ya respondio. Sin PANEL_PASSWORD el panel queda cerrado.
+// shortcut: un solo usuario y sin limite de intentos, cambiar cuando entren clientes o empleados
+function autorizar(req, res) {
+  const clave = process.env.PANEL_PASSWORD || '';
+  if (clave.length < 12) {
+    enviarJSON(res, 503, { error: 'Panel cerrado: define PANEL_PASSWORD (12 caracteres o mas) en Render > Environment.' });
+    return false;
+  }
+  const basic = /^Basic (.+)$/i.exec(req.headers.authorization || '');
+  const dado = basic ? Buffer.from(basic[1], 'base64').toString('utf8').replace(/^[^:]*:/, '') : '';
+  if (!igual(dado, clave)) {
+    res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Agente Social", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Contraseña requerida');
+    return false;
+  }
+  // El navegador manda la clave solo: exigir JSON impide que otra web dispare acciones (CSRF)
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !/^application\/json/i.test(req.headers['content-type'] || '')) {
+    enviarJSON(res, 415, { error: 'Se requiere Content-Type application/json' });
+    return false;
+  }
+  return true;
 }
 
 function servirEstatico(req, res) {
@@ -65,6 +110,14 @@ function servirEstatico(req, res) {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(archivo)] || 'application/octet-stream' });
     res.end(contenido);
   });
+}
+
+// Las fotos viven en el almacen: el disco de Render se borra en cada reinicio
+async function servirImagen(req, res, ruta) {
+  const buf = await store.leerArchivo(ruta);
+  if (!buf) return servirEstatico(req, res);
+  res.writeHead(200, { 'Content-Type': MIME[path.extname(ruta)] || 'application/octet-stream' });
+  res.end(buf);
 }
 
 function buscar(coleccion, idBuscado) {
@@ -428,11 +481,9 @@ async function manejarAPI(req, res, ruta) {
       const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
       const buffer = Buffer.from(m[2], 'base64');
       if (buffer.length > 10 * 1024 * 1024) return enviarJSON(res, 400, { error: 'La foto es muy grande (max 10 MB)' });
-      const dir = path.join(PUBLIC_DIR, 'uploads');
-      try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
-      const nombre = pub.id + '-' + Date.now().toString(36) + '.' + ext;
-      fs.writeFileSync(path.join(dir, nombre), buffer);
-      pub.imagenUrl = '/uploads/' + nombre;
+      const url = '/uploads/' + pub.id + '-' + Date.now().toString(36) + '.' + ext;
+      await store.guardarArchivo(url, buffer, MIME['.' + ext]);
+      pub.imagenUrl = url;
       pub.imagenIA = false;
       guardar();
       return enviarJSON(res, 200, { publicacion: pub });
@@ -450,11 +501,9 @@ async function manejarAPI(req, res, ruta) {
         const ext = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
         const buffer = Buffer.from(await r.arrayBuffer());
         if (buffer.length > 10 * 1024 * 1024) throw new Error('La imagen es muy grande (max 10 MB)');
-        const dir = path.join(PUBLIC_DIR, 'uploads');
-        try { fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
-        const nombre = pub.id + '-' + Date.now().toString(36) + '.' + ext;
-        fs.writeFileSync(path.join(dir, nombre), buffer);
-        pub.imagenUrl = '/uploads/' + nombre;
+        const ruta = '/uploads/' + pub.id + '-' + Date.now().toString(36) + '.' + ext;
+        await store.guardarArchivo(ruta, buffer, MIME['.' + ext]);
+        pub.imagenUrl = ruta;
         pub.imagenIA = false;
         guardar();
         return enviarJSON(res, 200, { publicacion: pub });
@@ -483,7 +532,7 @@ async function manejarAPI(req, res, ruta) {
       const base = baseDeReq(req);
       const pubEnvio = { ...pub, imagenUrl: absolutizar(pub.imagenUrl, base) };
       const resultado = await adapters.publicar(pub.plataforma, pubEnvio, empresa);
-      if (resultado.ok) {
+      if (resultado.ok && !resultado.simulado) {
         pub.estado = 'publicado';
         pub.publicado = new Date().toISOString();
       }
@@ -532,8 +581,11 @@ async function manejarAPI(req, res, ruta) {
         if (msg.canal === 'whatsapp') {
           envio = await adapters.enviarWhatsApp(msg.telefono || msg.cliente, msg.respuestaBorrador, msg.whatsappPhoneId);
         }
-        msg.estado = 'respondido';
-        msg.respondido = new Date().toISOString();
+        // En otros canales el dueno responde a mano; en WhatsApp solo cuenta si de verdad se envio
+        if (envio.ok && !(msg.canal === 'whatsapp' && envio.simulado)) {
+          msg.estado = 'respondido';
+          msg.respondido = new Date().toISOString();
+        }
         msg.envio = envio;
         guardar();
         return enviarJSON(res, 200, { mensaje: msg, envio });
@@ -572,7 +624,7 @@ async function crearMensajeEntrante({ empresa, canal, cliente, texto, telefono, 
   // Auto-respuesta por empresa (solo WhatsApp): responde solo, sin aprobacion
   if (empresa.autoResponder && (canal || 'whatsapp') === 'whatsapp') {
     const envio = await adapters.enviarWhatsApp(telefono || cliente, borrador, whatsappPhoneId);
-    if (envio.ok) {
+    if (envio.ok && !envio.simulado) {
       msg.estado = 'respondido';
       msg.respondido = new Date().toISOString();
       msg.envio = envio;
@@ -600,12 +652,19 @@ function verificarWebhookWhatsApp(req, res) {
 }
 
 async function recibirWebhookWhatsApp(req, res) {
-  const body = await leerBody(req);
+  const crudo = await leerCrudo(req);
+  // Solo Meta conoce el App Secret: sin firma valida cualquiera podria inventar mensajes
+  const secreto = process.env.META_APP_SECRET || '';
+  const firma = 'sha256=' + crypto.createHmac('sha256', secreto).update(crudo).digest('hex');
+  if (!secreto || !igual(String(req.headers['x-hub-signature-256'] || ''), firma)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    return res.end('Forbidden');
+  }
   // WhatsApp exige un 200 rapido; respondemos y procesamos despues.
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('EVENT_RECEIVED');
   try {
-    await procesarWhatsApp(body);
+    await procesarWhatsApp(parsearBody(crudo));
   } catch (e) {
     console.error('[whatsapp] error procesando webhook:', e.message);
   }
@@ -727,8 +786,9 @@ function manejarWidget(req, res, ruta) {
 }
 
 // ---------- servidor ----------
-const server = http.createServer(async (req, res) => {
+async function atender(req, res) {
   const ruta = req.url.split('?')[0];
+  if (!esPublica(ruta) && !autorizar(req, res)) return;
   if (ruta.startsWith('/api/')) {
     try {
       await manejarAPI(req, res, ruta);
@@ -741,7 +801,15 @@ const server = http.createServer(async (req, res) => {
   if (ruta === '/webhook/whatsapp' && req.method === 'POST') return recibirWebhookWhatsApp(req, res);
   if (ruta.startsWith('/feed/')) return manejarFeed(req, res, ruta);
   if (ruta.startsWith('/widget/')) return manejarWidget(req, res, ruta);
+  if (/^\/(uploads|generated)\//.test(ruta)) return servirImagen(req, res, ruta);
   servirEstatico(req, res);
+}
+
+const server = http.createServer((req, res) => {
+  atender(req, res).catch((e) => {
+    console.error('[servidor]', e.message);
+    if (!res.headersSent && !res.destroyed) enviarJSON(res, 500, { error: 'Error interno' });
+  });
 });
 
 store.iniciar().then(() => {

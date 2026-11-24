@@ -285,7 +285,7 @@ function simulado(plataforma, pub, motivo) {
     simulado: true,
     plataforma,
     idExterno: 'sim_' + Date.now(),
-    nota: (motivo ? motivo + ' — ' : '') + 'Publicado en modo simulado. Conecta tu cuenta para publicar de verdad.',
+    nota: (motivo ? motivo + ' — ' : '') + 'NO se publicó (modo simulado). Conecta tu cuenta para publicar de verdad.',
   };
 }
 

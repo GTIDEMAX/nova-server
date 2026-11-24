@@ -12,6 +12,9 @@ services:
     startCommand: npm start
     autoDeploy: true
     envVars:
+      # Contrasena del panel (obligatoria, 12 caracteres o mas)
+      - key: PANEL_PASSWORD
+        sync: false
       # IA de texto (Claude) — pon tu clave para textos reales
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -32,6 +35,8 @@ services:
       - key: WHATSAPP_TOKEN
         sync: false
       - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: META_APP_SECRET
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false

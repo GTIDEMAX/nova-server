@@ -13,12 +13,20 @@ const MAX_INTENTOS = 3;
 
 let timer = null;
 let ultimaEjecucion = null;
+let corriendo = false;
 
 function buscarEmpresa(id) {
   return estado.empresas.find((e) => e.id === id);
 }
 
+// Si una vuelta tarda mas que el intervalo, la siguiente publicaria lo mismo dos veces
 async function tick() {
+  if (corriendo) return;
+  corriendo = true;
+  try { await vuelta(); } finally { corriendo = false; }
+}
+
+async function vuelta() {
   ultimaEjecucion = new Date().toISOString();
   const ahora = Date.now();
   const vencidas = estado.publicaciones.filter(
@@ -31,11 +39,11 @@ async function tick() {
     try {
       const empresa = buscarEmpresa(p.empresaId);
       // Absolutiza la imagen si es una ruta local (Meta exige URL publica completa)
-      const base = process.env.PUBLIC_BASE_URL || '';
+      const base = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '';
       const pEnvio = p.imagenUrl && p.imagenUrl.startsWith('/') && base ? { ...p, imagenUrl: base + p.imagenUrl } : p;
       const resultado = await adapters.publicar(p.plataforma, pEnvio, empresa);
       p.resultadoPublicacion = resultado;
-      if (resultado.ok) {
+      if (resultado.ok && !resultado.simulado) {
         p.estado = 'publicado';
         p.publicado = new Date().toISOString();
         p.publicadoPor = 'programador';

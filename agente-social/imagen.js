@@ -9,17 +9,11 @@
 // Importante: estas imagenes son para GRAFICOS/PROMOS/FONDOS/ESCENAS, no para
 // mostrar el producto exacto (la IA no conoce tu producto real). Para el
 // producto real, sube tu propia foto en el campo de la publicacion.
-const fs = require('fs');
-const path = require('path');
+const store = require('./store');
 
-const DIR = process.env.GENERATED_DIR || path.join(__dirname, 'public', 'generated');
 const API_KEY = process.env.IMAGE_API_KEY || process.env.OPENAI_API_KEY;
 const MODEL = process.env.IMAGE_MODEL || 'gpt-image-1';
 const hayImagen = !!API_KEY;
-
-function asegurarDir() {
-  try { fs.mkdirSync(DIR, { recursive: true }); } catch (e) {}
-}
 
 // Construye el prompt final de imagen a partir de la marca y la publicacion.
 function construirPrompt({ empresa, plataforma, texto, imagenPrompt }) {
@@ -33,10 +27,9 @@ function construirPrompt({ empresa, plataforma, texto, imagenPrompt }) {
   );
 }
 
-// Genera una imagen y la guarda en public/generated. Devuelve la ruta publica.
+// Genera una imagen y la guarda en el almacen. Devuelve la ruta publica.
 async function generarImagen(prompt, id) {
   if (!API_KEY) return null;
-  asegurarDir();
   const r = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + API_KEY, 'Content-Type': 'application/json' },
@@ -55,9 +48,9 @@ async function generarImagen(prompt, id) {
   } else {
     throw new Error('La API no devolvio imagen');
   }
-  const nombre = (id || Date.now().toString(36)) + '.png';
-  fs.writeFileSync(path.join(DIR, nombre), buffer);
-  return '/generated/' + nombre;
+  const ruta = '/generated/' + (id || Date.now().toString(36)) + '.png';
+  await store.guardarArchivo(ruta, buffer, 'image/png');
+  return ruta;
 }
 
 module.exports = { generarImagen, construirPrompt, hayImagen };

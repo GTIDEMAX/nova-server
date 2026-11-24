@@ -35,9 +35,10 @@ Usaremos **Render** porque tiene plan **gratis** y se conecta directo a tu GitHu
 
 ### 4) (Opcional) Pon tus credenciales
 En la sección **Environment** del servicio puedes agregar tus claves (si aún no las tienes, déjalo así y funcionará en **modo demo**):
+- `PANEL_PASSWORD` → **obligatoria**, 12 caracteres o más. Sin ella el panel queda cerrado. Al entrar, el usuario puede ser cualquiera.
 - `ANTHROPIC_API_KEY` → para textos reales con IA (Claude).
 - `META_ACCESS_TOKEN`, `META_PAGE_ID`, `META_IG_USER_ID` → Instagram + Facebook.
-- `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN` → WhatsApp.
+- `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `META_APP_SECRET` → WhatsApp.
 
 Puedes agregarlas ahora o después (cada vez que guardas, se vuelve a desplegar solo).
 
