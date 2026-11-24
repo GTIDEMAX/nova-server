@@ -12,6 +12,7 @@ const adapters = require('./adapters');
 const scheduler = require('./scheduler');
 const feed = require('./feed');
 const imagen = require('./imagen');
+const recordatorios = require('./recordatorios');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -92,6 +93,79 @@ async function manejarAPI(req, res, ruta) {
   // Estado del programador automatico
   if (recurso === 'programador' && partes[2] === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, scheduler.estadoScheduler());
+  }
+
+  // ----- Clientes (ventas) y recordatorios de bateria -----
+  if (recurso === 'clientes') {
+    if (req.method === 'GET' && !partes[2]) {
+      const lista = (estado.clientes || []).map((c) => ({
+        ...c,
+        proximo: recordatorios.proximo(c),
+        enviados: (c.recordatorios || []).filter((r) => r.estado === 'enviado').length,
+        total: (c.recordatorios || []).length,
+      }));
+      return enviarJSON(res, 200, { clientes: lista, modo: recordatorios.modo() });
+    }
+    if (req.method === 'POST' && !partes[2]) {
+      const empresa = buscar('empresas', body.empresaId);
+      if (!empresa) return enviarJSON(res, 400, { error: 'Elige la empresa' });
+      if (!body.consentimiento) return enviarJSON(res, 400, { error: 'El cliente debe aceptar recibir mensajes por WhatsApp' });
+      const tel = recordatorios.normalizarTelefono(body.telefono);
+      if (tel.length !== 12) return enviarJSON(res, 400, { error: 'WhatsApp no válido: escribe los 10 dígitos del celular' });
+      const cliente = {
+        id: id(),
+        empresaId: empresa.id,
+        nombre: (body.nombre || '').trim() || 'Cliente',
+        telefono: tel,
+        producto: (body.producto || '').trim() || 'tu vehículo',
+        tipoBateria: body.tipoBateria === 'litio' ? 'litio' : 'plomo',
+        fechaCompra: body.fechaCompra ? new Date(body.fechaCompra + 'T12:00:00').toISOString() : new Date().toISOString(),
+        consentimiento: true,
+        activo: true,
+        creado: new Date().toISOString(),
+      };
+      cliente.recordatorios = recordatorios.crearPlan(cliente, id);
+      // Registro de una venta pasada: no mandar varios mensajes de golpe.
+      // Solo queda pendiente el recordatorio vencido mas reciente; los anteriores se omiten.
+      const ahora = Date.now();
+      const vencidos = cliente.recordatorios.filter((r) => new Date(r.fecha).getTime() <= ahora);
+      vencidos.slice(0, -1).forEach((r) => { r.estado = 'omitido'; r.via = 'registro-tardio'; });
+      estado.clientes.push(cliente);
+      guardar();
+      return enviarJSON(res, 201, cliente);
+    }
+    if (partes[2]) {
+      const c = buscar('clientes', partes[2]);
+      if (!c) return enviarJSON(res, 404, { error: 'Cliente no encontrado' });
+      if (req.method === 'DELETE') {
+        estado.clientes = estado.clientes.filter((x) => x.id !== c.id);
+        guardar();
+        return enviarJSON(res, 200, { ok: true });
+      }
+      if (req.method === 'PATCH') {
+        if (typeof body.activo === 'boolean') c.activo = body.activo;
+        guardar();
+        return enviarJSON(res, 200, c);
+      }
+    }
+  }
+
+  if (recurso === 'recordatorios') {
+    // Los de hoy (y atrasados), con el enlace de WhatsApp listo
+    if (partes[2] === 'hoy' && req.method === 'GET') {
+      return enviarJSON(res, 200, { pendientes: recordatorios.pendientes(estado), modo: recordatorios.modo() });
+    }
+    // Marcar como enviado u omitido: /api/recordatorios/:clienteId/:recId/(enviado|omitir)
+    if (partes[2] && partes[3] && ['enviado', 'omitir'].includes(partes[4]) && req.method === 'POST') {
+      const c = buscar('clientes', partes[2]);
+      const r = c && (c.recordatorios || []).find((x) => x.id === partes[3]);
+      if (!r) return enviarJSON(res, 404, { error: 'Recordatorio no encontrado' });
+      r.estado = partes[4] === 'enviado' ? 'enviado' : 'omitido';
+      r.enviado = new Date().toISOString();
+      r.via = '1-toque';
+      guardar();
+      return enviarJSON(res, 200, r);
+    }
   }
 
   // Metricas y reportes
@@ -403,6 +477,19 @@ async function procesarWhatsApp(body) {
         const from = m.from;
         const contacto = contactos.find((c) => c.wa_id === from);
         const nombre = (contacto && contacto.profile && contacto.profile.name) || from;
+        // Si responde BAJA, se pausan sus recordatorios postventa
+        if (/^\s*(baja|stop)\s*\.?\s*$/i.test(m.text.body || '')) {
+          const tel = recordatorios.normalizarTelefono(from);
+          for (const c of estado.clientes || []) {
+            if (recordatorios.normalizarTelefono(c.telefono) === tel && c.activo) {
+              c.activo = false;
+              c.bajaPor = 'cliente';
+              c.baja = new Date().toISOString();
+              console.log(`[whatsapp] ${from} pidió BAJA: recordatorios pausados`);
+            }
+          }
+          guardar();
+        }
         // Enruta al negocio dueño de ese numero, o al primero registrado
         const empresa = estado.empresas.find((e) => e.whatsappPhoneId && e.whatsappPhoneId === phoneId) || estado.empresas[0];
         if (!empresa) {

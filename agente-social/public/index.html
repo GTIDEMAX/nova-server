@@ -33,12 +33,12 @@
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
   .chip { font-size: 12px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; user-select: none; color: var(--muted); }
   .chip.sel { background: var(--acc); border-color: var(--acc); color: #fff; }
-  button.btn { background: var(--acc); color: #fff; border: none; padding: 10px 16px; border-radius: 9px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 12px; }
+  button.btn, a.btn { background: var(--acc); color: #fff; border: none; padding: 10px 16px; border-radius: 9px; font-weight: 600; cursor: pointer; font-size: 14px; margin-top: 12px; }
   button.btn.sec { background: var(--panel2); border: 1px solid var(--line); }
-  button.btn.ok { background: var(--ok); }
+  button.btn.ok, a.btn.ok { background: var(--ok); }
   button.btn.warn { background: var(--warn); color: #201a00; }
   button.btn.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
-  button.btn.mini { padding: 6px 10px; font-size: 12px; margin: 0; }
+  button.btn.mini, a.btn.mini { padding: 6px 10px; font-size: 12px; margin: 0; }
   .item { border: 1px solid var(--line); border-radius: 11px; padding: 14px; margin-bottom: 10px; background: var(--panel2); }
   .item .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .tag { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #2a2f52; color: var(--muted); text-transform: capitalize; }
@@ -89,6 +89,7 @@
   <button data-tab="contenido">✍️ Crear contenido</button>
   <button data-tab="aprobaciones">📅 Publicaciones</button>
   <button data-tab="atencion">💬 Atención al cliente</button>
+  <button data-tab="clientes">🔋 Clientes</button>
   <button data-tab="web">🌐 Mi web</button>
   <button data-tab="reportes">📊 Reportes</button>
 </nav>
@@ -98,6 +99,7 @@
   <section id="tab-contenido" hidden></section>
   <section id="tab-aprobaciones" hidden></section>
   <section id="tab-atencion" hidden></section>
+  <section id="tab-clientes" hidden></section>
   <section id="tab-web" hidden></section>
   <section id="tab-reportes" hidden></section>
 </main>
@@ -135,7 +137,7 @@ let tab = 'empresas';
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===btn));
-  ['empresas','contenido','aprobaciones','atencion','web','reportes'].forEach(t => $('#tab-'+t).hidden = t!==tab);
+  ['empresas','contenido','aprobaciones','atencion','clientes','web','reportes'].forEach(t => $('#tab-'+t).hidden = t!==tab);
   render();
 });
 
@@ -144,6 +146,7 @@ function render() {
   if (tab==='contenido') renderContenido();
   if (tab==='aprobaciones') renderAprobaciones();
   if (tab==='atencion') renderAtencion();
+  if (tab==='clientes') renderClientes();
   if (tab==='web') renderWeb();
   if (tab==='reportes') renderReportes();
 }
@@ -481,6 +484,95 @@ function renderWeb() {
   };
   $('#w-emp', card).onchange = pintar;
   pintar();
+}
+
+// ---------- CLIENTES Y RECORDATORIOS DE BATERÍA ----------
+async function renderClientes() {
+  const c = $('#tab-clientes');
+  if (!S.empresas.length) { c.innerHTML = ''; c.appendChild(el('<div class="empty">Primero registra una empresa.</div>')); return; }
+  let datos, hoy;
+  try { [datos, hoy] = await Promise.all([api('/api/clientes'), api('/api/recordatorios/hoy')]); }
+  catch (e) { c.innerHTML = ''; c.appendChild(el('<div class="empty">No se pudieron cargar los clientes.</div>')); return; }
+  c.innerHTML = '';
+
+  c.appendChild(el(`<div class="card"><div class="flex-b"><h3>🔋 Recordatorios de batería</h3>
+    <span class="badge ${datos.modo.auto ? 'on' : 'off'}">${datos.modo.auto ? 'Automático' : '1-toque'}</span></div>
+    <div class="muted" style="margin-top:6px">${esc(datos.modo.detalle)}</div></div>`));
+
+  // Para enviar hoy
+  const hoyCard = el(`<div class="card"><h2>📲 Para enviar hoy (${hoy.pendientes.length})</h2><div></div></div>`);
+  const lista = hoyCard.lastElementChild;
+  if (!hoy.pendientes.length) lista.appendChild(el('<div class="muted">Nada pendiente hoy 🎉</div>'));
+  hoy.pendientes.forEach(p => {
+    const item = el(`<div class="item">
+      <div class="top"><div><b>${esc(p.cliente)}</b> <span class="tag">${esc(p.tipoBateria)}</span> <span class="muted">${esc(p.producto)} · día ${p.dia}</span></div><span class="muted">${esc(p.empresa)}</span></div>
+      <div style="white-space:pre-wrap;font-size:14px;margin:6px 0 10px">${esc(p.texto)}</div>
+      <div class="acciones"></div></div>`);
+    const acc = $('.acciones', item);
+    const bEnv = el(`<a class="btn ok mini" href="${p.link}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">📲 Enviar por WhatsApp</a>`);
+    bEnv.onclick = () => setTimeout(async () => {
+      try { await api(`/api/recordatorios/${p.clienteId}/${p.recordatorioId}/enviado`, { method: 'POST' }); toast('Marcado como enviado ✅'); renderClientes(); }
+      catch (e) { toast(e.message); }
+    }, 400);
+    const bOmit = el('<button class="btn sec mini">Omitir</button>');
+    bOmit.onclick = async () => { await api(`/api/recordatorios/${p.clienteId}/${p.recordatorioId}/omitir`, { method: 'POST' }); toast('Omitido'); renderClientes(); };
+    acc.appendChild(bEnv); acc.appendChild(bOmit);
+    lista.appendChild(item);
+  });
+  c.appendChild(hoyCard);
+
+  // Registrar venta
+  const form = el(`<div class="card">
+    <h2>➕ Registrar venta</h2>
+    <p class="muted">Al guardar, el agente programa los recordatorios de cuidado según la batería: plomo (recarga mensual, siempre llena) o litio (media carga si se guarda).</p>
+    <div class="row">
+      <div><label>Empresa</label><select id="k-emp">${S.empresas.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
+      <div><label>Fecha de compra</label><input type="date" id="k-fecha" value="${new Date().toISOString().slice(0, 10)}"></div>
+    </div>
+    <div class="row">
+      <div><label>Nombre del cliente</label><input id="k-nombre" placeholder="Ej: Juan Pérez"></div>
+      <div><label>WhatsApp (10 dígitos)</label><input id="k-tel" inputmode="numeric" placeholder="Ej: 2411234567"></div>
+    </div>
+    <div class="row">
+      <div><label>Producto / modelo</label><input id="k-prod" placeholder="Ej: scooter eléctrico"></div>
+      <div><label>Batería</label><select id="k-bat"><option value="plomo">Plomo</option><option value="litio">Litio (patines)</option></select></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;cursor:pointer;font-size:13px;color:var(--txt)">
+      <input type="checkbox" id="k-ok" style="width:auto;margin-top:2px"> El cliente aceptó recibir recordatorios por WhatsApp
+    </label>
+    <button class="btn" id="k-guardar">Guardar y programar recordatorios</button>
+  </div>`);
+  $('#k-guardar', form).onclick = async () => {
+    try {
+      await api('/api/clientes', { method: 'POST', body: JSON.stringify({
+        empresaId: $('#k-emp', form).value, fechaCompra: $('#k-fecha', form).value, nombre: $('#k-nombre', form).value,
+        telefono: $('#k-tel', form).value, producto: $('#k-prod', form).value, tipoBateria: $('#k-bat', form).value,
+        consentimiento: $('#k-ok', form).checked }) });
+      toast('Cliente guardado ✅ Recordatorios programados'); renderClientes();
+    } catch (e) { toast(e.message); }
+  };
+  c.appendChild(form);
+
+  // Lista de clientes
+  const lst = el(`<div class="card"><h2>👥 Clientes (${datos.clientes.length})</h2><div></div></div>`);
+  const kl = lst.lastElementChild;
+  if (!datos.clientes.length) kl.appendChild(el('<div class="muted">Aún no hay clientes registrados.</div>'));
+  datos.clientes.slice().reverse().forEach(k => {
+    const prox = k.proximo ? new Date(k.proximo).toLocaleDateString('es') : '—';
+    const it = el(`<div class="item">
+      <div class="top"><div><b>${esc(k.nombre)}</b> <span class="tag">${esc(k.tipoBateria)}</span> ${k.activo ? '' : '<span class="estado e-fallido">pausado</span>'}</div><span class="muted">+${esc(k.telefono)}</span></div>
+      <div class="muted">${esc(k.producto)} · ${esc(nombreEmpresa(k.empresaId))} · compró el ${new Date(k.fechaCompra).toLocaleDateString('es')}</div>
+      <div class="muted">Recordatorios enviados: ${k.enviados}/${k.total} · Próximo: ${k.activo ? prox : '—'}${k.bajaPor === 'cliente' ? ' · pidió BAJA' : ''}</div>
+      <div class="acciones"></div></div>`);
+    const acc = $('.acciones', it);
+    const bP = el(`<button class="btn sec mini">${k.activo ? '⏸️ Pausar' : '▶️ Reactivar'}</button>`);
+    bP.onclick = async () => { await api('/api/clientes/' + k.id, { method: 'PATCH', body: JSON.stringify({ activo: !k.activo }) }); renderClientes(); };
+    const bD = el('<button class="btn danger mini">Eliminar</button>');
+    bD.onclick = async () => { if (confirm('¿Eliminar a ' + k.nombre + '?')) { await api('/api/clientes/' + k.id, { method: 'DELETE' }); renderClientes(); } };
+    acc.appendChild(bP); acc.appendChild(bD);
+    kl.appendChild(it);
+  });
+  c.appendChild(lst);
 }
 
 // ---------- REPORTES ----------

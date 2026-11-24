@@ -35,6 +35,16 @@ services:
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
+      # Base de datos (MongoDB Atlas gratis) — para que NO se borren tus datos al reiniciar
+      - key: MONGODB_URI
+        sync: false
+      # Recordatorios de bateria: "1" = se envian solos (requiere WhatsApp API + plantilla aprobada)
+      - key: RECORDATORIOS_AUTO
+        value: "0"
+      - key: WHATSAPP_TEMPLATE_RECORDATORIO
+        value: recordatorio_bateria
+      - key: WHATSAPP_TEMPLATE_IDIOMA
+        value: es_MX
       # Web / blog (opcional)
       - key: WEB_PUBLISH_WEBHOOK
         sync: false

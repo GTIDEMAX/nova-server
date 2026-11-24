@@ -6,6 +6,7 @@
 
 const { estado, guardar } = require('./store');
 const adapters = require('./adapters');
+const recordatorios = require('./recordatorios');
 
 const INTERVALO = parseInt(process.env.SCHEDULER_INTERVAL_MS, 10) || 60000; // 1 min por defecto
 const MAX_INTENTOS = 3;
@@ -54,6 +55,15 @@ async function tick() {
     }
   }
   if (cambios) guardar();
+
+  // Recordatorios postventa: solo se envian solos en modo automatico
+  // (WhatsApp Cloud API + plantilla aprobada). En modo 1-toque los envia el dueno desde el panel.
+  try {
+    const n = await recordatorios.procesarAutomaticos(estado, guardar, adapters);
+    if (n) console.log(`[programador] 🔋 ${n} recordatorio(s) de batería enviados`);
+  } catch (e) {
+    console.error('[programador] recordatorios:', e.message);
+  }
 }
 
 function iniciar() {

@@ -177,6 +177,37 @@ async function enviarWhatsApp(telefono, texto, phoneId) {
   }
 }
 
+// --- Envio con PLANTILLA aprobada (obligatorio para escribir a un cliente fuera de
+// la ventana de 24 h de WhatsApp). 'params' llena las variables {{1}}, {{2}}... del cuerpo.
+async function enviarPlantillaWhatsApp(telefono, plantilla, idioma, params, phoneId) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const pid = phoneId || process.env.WHATSAPP_PHONE_ID;
+  if (!token || !pid || !plantilla) {
+    return { ok: true, simulado: true, canal: 'whatsapp', nota: 'Plantilla enviada en modo simulado (falta configurar WhatsApp o la plantilla).' };
+  }
+  try {
+    const r = await fetch(`${GRAPH}/${pid}/messages`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: String(telefono).replace(/\D/g, ''),
+        type: 'template',
+        template: {
+          name: plantilla,
+          language: { code: idioma || 'es_MX' },
+          components: [{ type: 'body', parameters: (params || []).map((t) => ({ type: 'text', text: String(t) })) }],
+        },
+      }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.error ? data.error.message : 'HTTP ' + r.status);
+    return { ok: true, simulado: false, canal: 'whatsapp', idExterno: data.messages?.[0]?.id, nota: 'Recordatorio enviado por WhatsApp ✅' };
+  } catch (e) {
+    return { ok: false, simulado: false, canal: 'whatsapp', error: e.message, nota: 'Error al enviar la plantilla: ' + e.message };
+  }
+}
+
 // --- Verifica la conexion con WhatsApp (para el panel) ---
 async function verificarWhatsApp() {
   const token = process.env.WHATSAPP_TOKEN;
@@ -208,4 +239,4 @@ function simulado(plataforma, pub, motivo) {
   };
 }
 
-module.exports = { publicar, enviarWhatsApp, verificarMeta, verificarWhatsApp };
+module.exports = { publicar, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };

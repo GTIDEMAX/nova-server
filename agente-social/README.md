@@ -161,6 +161,34 @@ La pestaña **Reportes** muestra un tablero con:
 
 Puedes filtrar por empresa o ver todas juntas. Las métricas de **alcance/likes** de cada red aparecerán aquí cuando conectes las cuentas (Meta, etc.).
 
+## Recordatorios de batería 🔋 (pestaña Clientes)
+
+Cuando vendes un vehículo eléctrico, lo registras en **🔋 Clientes → Registrar venta** (nombre, WhatsApp, producto y tipo de batería). **Solo con permiso del cliente**: la casilla de consentimiento es obligatoria (WhatsApp lo exige).
+
+El agente programa los mensajes de cuidado según la batería:
+
+| Batería | Plan | Idea clave |
+|---|---|---|
+| **Plomo** (la mayoría) | Bienvenida, día 7 y luego **cada mes** durante un año | Cargarla después de cada uso; **siempre llena** (si se queda descargada se sulfata y se daña) |
+| **Litio** (patines) | Bienvenida, día 7, día 30 y cada ~2 meses | No llegar a cero; cargador original; **guardar con media carga** |
+
+Si registras una venta antigua, los mensajes atrasados se saltan y solo queda el más reciente.
+
+**Dos modos:**
+
+1. **1-toque (por defecto, gratis, sin configurar nada):** en **"Para enviar hoy"** aparece a quién le toca. Tocas **📲 Enviar por WhatsApp**, se abre tu WhatsApp con el mensaje ya escrito y solo das enviar. Queda marcado como enviado.
+2. **Automático:** se envían solos desde el programador. Requiere:
+   - `WHATSAPP_TOKEN` y `WHATSAPP_PHONE_ID` (WhatsApp Cloud API).
+   - Una **plantilla aprobada** en Meta (WhatsApp Manager → Plantillas), por ejemplo:
+     - Nombre: `recordatorio_bateria` · Idioma: Español (México) `es_MX`
+     - Cuerpo: `Hola {{1}}, te saluda {{2}}. Recordatorio para cuidar tu batería: {{3}} Si ya no quieres recibir estos mensajes, responde BAJA.`
+     - Meta decide la categoría (utilidad o marketing) y el costo por mensaje.
+   - `WHATSAPP_TEMPLATE_RECORDATORIO=recordatorio_bateria` y `RECORDATORIOS_AUTO=1`.
+
+**Baja:** si el cliente responde **BAJA** (o STOP) por WhatsApp, se pausa solo (con la API conectada). En el panel también puedes **Pausar** o **Eliminar** a cualquier cliente.
+
+> ⚠️ En Render gratis, conecta `MONGODB_URI` (MongoDB Atlas gratis). Si no, la lista de clientes se borra cuando el servidor se reinicia.
+
 ## Autonomía (mixta, como pediste)
 
 - **Contenido** → siempre pasa por tu aprobación antes de publicarse.
