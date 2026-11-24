@@ -18,6 +18,7 @@
   .badge { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
   .badge.on { color: var(--ok); border-color: var(--ok); }
   .badge.off { color: var(--warn); border-color: var(--warn); }
+  .badge.warn { color: var(--warn); border-color: var(--warn); background: rgba(255,200,0,.08); }
   nav { display: flex; gap: 6px; padding: 12px 24px 0; flex-wrap: wrap; }
   nav button { background: transparent; border: none; color: var(--muted); padding: 10px 16px; border-radius: 10px 10px 0 0; cursor: pointer; font-size: 14px; font-weight: 600; }
   nav button.active { background: var(--panel); color: var(--txt); }
@@ -91,6 +92,7 @@
   <button data-tab="aprobaciones">📅 Publicaciones</button>
   <button data-tab="atencion">💬 Atención al cliente</button>
   <button data-tab="clientes">🔋 Clientes</button>
+  <button data-tab="spots">🎙️ Spots</button>
   <button data-tab="web">🌐 Mi web</button>
   <button data-tab="reportes">📊 Reportes</button>
 </nav>
@@ -101,6 +103,7 @@
   <section id="tab-aprobaciones" hidden></section>
   <section id="tab-atencion" hidden></section>
   <section id="tab-clientes" hidden></section>
+  <section id="tab-spots" hidden></section>
   <section id="tab-web" hidden></section>
   <section id="tab-reportes" hidden></section>
 </main>
@@ -146,7 +149,7 @@ let tab = 'empresas';
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===btn));
-  ['empresas','contenido','aprobaciones','atencion','clientes','web','reportes'].forEach(t => $('#tab-'+t).hidden = t!==tab);
+  ['empresas','contenido','aprobaciones','atencion','clientes','spots','web','reportes'].forEach(t => $('#tab-'+t).hidden = t!==tab);
   render();
 });
 
@@ -156,6 +159,7 @@ function render() {
   if (tab==='aprobaciones') renderAprobaciones();
   if (tab==='atencion') renderAtencion();
   if (tab==='clientes') renderClientes();
+  if (tab==='spots') renderSpots();
   if (tab==='web') renderWeb();
   if (tab==='reportes') renderReportes();
 }
@@ -609,6 +613,192 @@ async function renderClientes() {
     kl.appendChild(it);
   });
   c.appendChild(lst);
+}
+
+// ---------- SPOTS (audio con ElevenLabs) ----------
+const FORMATOS_SPOT = { spot: '📻 Spot (30 s, una voz)', dialogo: '🎭 Diálogo (2 voces)', bocina: '🔊 Bocina para la tienda (cápsulas, ~6 min)' };
+const ESTILOS_LECTURA = { emocionado: '🔥 Emocionado', amigable: '😊 Amigable', serio: '🎩 Serio', dramatico: '🎬 Dramático' };
+const MUSICAS = ['reggaetón actual', 'cumbia moderna', 'regional mexicano / corridos', 'electro latino', 'pop alegre', 'navideña con energía', 'épica / de película', 'rock con energía'];
+let VOCES = null;
+let spotsPoll = null;
+
+async function cargarVoces() {
+  if (VOCES) return VOCES;
+  try { const r = await api('/api/spots/voces'); VOCES = r.ok && r.voces.length ? r.voces : null; } catch (e) { VOCES = null; }
+  return VOCES || [{ id: 'JjHBC66wF58p4ogebCNA', nombre: 'Eduardo (voz comercial)', idioma: 'es', genero: 'hombre', descripcion: '', muestra: '' }];
+}
+function opcionesVoz(voces, sel) {
+  return voces.map(v => `<option value="${esc(v.id)}" ${v.id === sel ? 'selected' : ''}>${esc(v.nombre)}${v.genero ? ' · ' + v.genero : ''}${v.idioma && v.idioma !== 'es' ? ' · ' + v.idioma : ''}</option>`).join('');
+}
+function oirVoz(voces, id) {
+  const v = voces.find(x => x.id === id);
+  if (!v || !v.muestra) return toast('Esta voz no tiene muestra');
+  new Audio(v.muestra).play().catch(() => toast('No se pudo reproducir la muestra'));
+}
+
+async function renderSpots() {
+  const c = $('#tab-spots');
+  if (!S.empresas.length) { c.innerHTML = ''; c.appendChild(el('<div class="empty">Primero registra una empresa.</div>')); return; }
+  let datos;
+  try { datos = await api('/api/spots'); } catch (e) { c.innerHTML = ''; c.appendChild(el('<div class="empty">No se pudieron cargar los spots.</div>')); return; }
+  const voces = await cargarVoces();
+  const vozDef = datos.vozDefault;
+  c.innerHTML = '';
+
+  c.appendChild(el(`<div class="card"><div class="flex-b"><h3>🎙️ Spots de audio</h3>
+    <span class="badge ${datos.eleven ? 'on' : 'off'}">${datos.eleven ? 'ElevenLabs conectado' : 'Falta ElevenLabs'}</span></div>
+    <div class="muted" style="margin-top:6px">${datos.eleven
+      ? 'Tú das la idea, la IA escribe el guion, tú lo editas y escoges las voces. Luego el sistema graba, pone música y te da el MP3 listo.'
+      : 'Para producir audio agrega <b>ELEVENLABS_API_KEY</b> en Render → Environment. Mientras, ya puedes escribir y editar guiones.'}</div></div>`));
+
+  // Nuevo spot
+  const form = el(`<div class="card"><h2>➕ Nuevo spot</h2>
+    <div class="row">
+      <div><label>Empresa</label><select id="s-emp">${S.empresas.map(e => `<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
+      <div><label>Formato</label><select id="s-formato">${Object.entries(FORMATOS_SPOT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+    </div>
+    <div class="row">
+      <div><label>Voz principal</label><div style="display:flex;gap:6px"><select id="s-vozA">${opcionesVoz(voces, vozDef)}</select><button class="btn sec mini" id="s-oirA" title="Oír muestra">▶</button></div></div>
+      <div id="s-vozB-box"><label id="s-vozB-label">Segunda voz</label><div style="display:flex;gap:6px"><select id="s-vozB">${opcionesVoz(voces, (voces.find(v => v.id !== vozDef && v.idioma === 'es') || {}).id)}</select><button class="btn sec mini" id="s-oirB" title="Oír muestra">▶</button></div></div>
+    </div>
+    <label>Música de fondo</label><select id="s-musica">${MUSICAS.map(m => `<option>${m}</option>`).join('')}</select>
+    <label>Idea del spot (pon aquí los datos reales: promo, precios, teléfono, redes…)</label>
+    <textarea id="s-idea" placeholder="Ej: Buen Fin en VOLTUM: scooters y motos eléctricas, apartado hasta 3 meses, meses con tarjeta, regalo sorpresa. WhatsApp 241 339 1574. Tiendas en Apizaco y Tlaxco."></textarea>
+    <div class="acciones"><button class="btn" id="s-ia">✨ Que la IA escriba el guion</button><button class="btn sec" id="s-manual">✍️ Escribirlo yo</button></div>
+  </div>`);
+  c.appendChild(form);
+  const fmt = $('#s-formato', form);
+  const ajustarB = () => {
+    $('#s-vozB-box', form).style.display = fmt.value === 'spot' ? 'none' : '';
+    $('#s-vozB-label', form).textContent = fmt.value === 'bocina' ? 'Voz para los tips' : 'Voz del personaje B';
+  };
+  fmt.onchange = ajustarB; ajustarB();
+  $('#s-oirA', form).onclick = () => oirVoz(voces, $('#s-vozA', form).value);
+  $('#s-oirB', form).onclick = () => oirVoz(voces, $('#s-vozB', form).value);
+  const crear = async (manual, btn) => {
+    btn.disabled = true; const t = btn.textContent; btn.textContent = manual ? 'Creando…' : '✨ Escribiendo guion… (unos segundos)';
+    try {
+      await api('/api/spots', { method: 'POST', body: JSON.stringify({
+        empresaId: $('#s-emp', form).value, formato: fmt.value, estiloMusica: $('#s-musica', form).value,
+        vozA: $('#s-vozA', form).value, vozB: fmt.value === 'spot' ? '' : $('#s-vozB', form).value,
+        idea: $('#s-idea', form).value, manual,
+      }) });
+      toast(manual ? 'Spot en blanco creado ✍️' : 'Guion listo ✅ Revísalo y edítalo abajo');
+      renderSpots();
+    } catch (e) { toast(e.message); btn.disabled = false; btn.textContent = t; }
+  };
+  $('#s-ia', form).onclick = (ev) => crear(false, ev.target);
+  $('#s-manual', form).onclick = (ev) => crear(true, ev.target);
+
+  // Lista
+  const lista = el(`<div class="card"><h2>🎧 Tus spots (${datos.spots.length})</h2><div></div></div>`);
+  const cont = lista.lastElementChild;
+  if (!datos.spots.length) cont.appendChild(el('<div class="muted">Aún no tienes spots. Crea el primero arriba.</div>'));
+  datos.spots.forEach(sp => cont.appendChild(tarjetaSpot(sp, voces, datos.eleven)));
+  c.appendChild(lista);
+
+  // Si hay alguno produciéndose, revisa cada 5 s solo esas tarjetas
+  clearTimeout(spotsPoll);
+  if (datos.spots.some(sp => sp.estado === 'produciendo')) spotsPoll = setTimeout(pollSpots, 5000);
+}
+
+async function pollSpots() {
+  if (tab !== 'spots') return;
+  let datos; try { datos = await api('/api/spots'); } catch (e) { spotsPoll = setTimeout(pollSpots, 8000); return; }
+  const voces = await cargarVoces();
+  let siguen = false;
+  datos.spots.forEach(sp => {
+    const vieja = document.querySelector(`[data-spot="${sp.id}"]`);
+    if (!vieja) return;
+    if (sp.estado === 'produciendo') {
+      siguen = true;
+      const p = vieja.querySelector('.sp-progreso'); if (p) p.textContent = '⏳ ' + (sp.progreso || 'Produciendo…');
+    } else if (vieja.dataset.estado === 'produciendo') {
+      vieja.replaceWith(tarjetaSpot(sp, voces, datos.eleven));
+      toast(sp.estado === 'listo' ? '🎧 ¡Spot listo! Dale play' : '❌ Hubo un error al producir');
+    }
+  });
+  if (siguen) spotsPoll = setTimeout(pollSpots, 5000);
+}
+
+function tarjetaSpot(sp, voces, eleven) {
+  const empresa = nombreEmpresa(sp.empresaId);
+  const produciendo = sp.estado === 'produciendo';
+  const badge = { borrador: ['off', '✏️ Borrador'], produciendo: ['warn', '⏳ Produciendo'], listo: ['on', '🎧 Listo'], error: ['off', '❌ Error'] }[sp.estado] || ['off', sp.estado];
+  const item = el(`<div class="item" data-spot="${sp.id}" data-estado="${sp.estado}">
+    <div class="top"><div><input class="sp-titulo" value="${esc(sp.titulo || '')}" style="font-weight:700;font-size:15px" ${produciendo ? 'disabled' : ''}></div>
+      <span class="badge ${badge[0]}">${badge[1]}</span></div>
+    <div class="muted" style="margin:6px 0">${esc(empresa)} · ${FORMATOS_SPOT[sp.formato] || sp.formato}${sp.duracion ? ' · ' + Math.round(sp.duracion) + ' s' : ''}</div>
+    ${sp.estado === 'listo' && sp.audio ? `<audio controls preload="none" style="width:100%;margin:6px 0" src="/api/spots/${sp.id}/audio?v=${sp.version || 1}"></audio>
+      <div><a class="btn ok mini" style="text-decoration:none;display:inline-block" href="/api/spots/${sp.id}/audio?descargar=1">⬇️ Descargar MP3</a></div>` : ''}
+    ${produciendo ? `<div class="sp-progreso" style="margin:8px 0;color:var(--warn)">⏳ ${esc(sp.progreso || 'Produciendo…')} (tarda 1 a 3 minutos)</div>` : ''}
+    ${sp.estado === 'error' ? `<div style="margin:8px 0;color:var(--danger)">❌ ${esc(sp.error || 'Error')}</div>` : ''}
+    <details ${sp.estado === 'borrador' || sp.estado === 'error' ? 'open' : ''} style="margin-top:8px"><summary style="cursor:pointer;color:var(--muted)">✏️ Guion, voces y música (editable)</summary>
+      <div class="sp-lineas"></div>
+      <button class="btn sec mini sp-add" style="margin-top:8px" ${produciendo ? 'disabled' : ''}>➕ Agregar línea</button>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:14px;cursor:pointer;color:var(--txt);font-size:13px"><input type="checkbox" class="sp-conmusica" style="width:auto" ${sp.conMusica !== false ? 'checked' : ''} ${produciendo ? 'disabled' : ''}> Con música de fondo</label>
+      <label>Descripción de la música (en inglés; la IA ya la llenó, puedes cambiarla)</label>
+      <textarea class="sp-musica" style="min-height:50px" ${produciendo ? 'disabled' : ''}>${esc(sp.musicaPrompt || '')}</textarea>
+    </details>
+    <div class="acciones">
+      <button class="btn sec mini sp-guardar" ${produciendo ? 'disabled' : ''}>💾 Guardar cambios</button>
+      <button class="btn ok mini sp-producir" ${produciendo || !eleven ? 'disabled' : ''} title="${eleven ? 'Gasta créditos de ElevenLabs (voz + música)' : 'Falta ELEVENLABS_API_KEY'}">🎙️ ${sp.estado === 'listo' ? 'Volver a producir' : 'Producir audio'}</button>
+      <button class="btn danger mini sp-borrar" ${produciendo ? 'disabled' : ''}>Eliminar</button>
+    </div>
+  </div>`);
+
+  const cont = $('.sp-lineas', item);
+  const filaLinea = (l) => {
+    const f = el(`<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px">
+      <div class="row" style="align-items:flex-end">
+        <div><label>Voz</label><div style="display:flex;gap:6px"><select class="l-voz">${opcionesVoz(voces, l.vozId)}</select><button class="btn sec mini l-oir" title="Oír muestra">▶</button></div></div>
+        <div><label>Cómo lo dice</label><select class="l-estilo">${Object.entries(ESTILOS_LECTURA).map(([k, v]) => `<option value="${k}" ${k === (l.estilo || 'emocionado') ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        ${sp.formato === 'bocina' ? `<div style="max-width:150px"><label>Tipo</label><select class="l-tipo"><option value="venta" ${l.tipo !== 'tip' ? 'selected' : ''}>📣 Venta</option><option value="tip" ${l.tipo === 'tip' ? 'selected' : ''}>💡 Tip</option></select></div>` : ''}
+        <div style="flex:0;min-width:auto"><button class="btn danger mini l-quitar" title="Quitar línea">✕</button></div>
+      </div>
+      <textarea class="l-texto" style="margin-top:8px" placeholder="Lo que dice el locutor…">${esc(l.texto || '')}</textarea>
+    </div>`);
+    f.dataset.personaje = l.personaje || 'A';
+    $('.l-oir', f).onclick = () => oirVoz(voces, $('.l-voz', f).value);
+    $('.l-quitar', f).onclick = () => f.remove();
+    if (produciendo) f.querySelectorAll('select,textarea,button').forEach(x => x.disabled = true);
+    cont.appendChild(f);
+  };
+  (sp.capsulas || []).forEach(filaLinea);
+  $('.sp-add', item).onclick = () => {
+    const filas = cont.children; const ult = filas[filas.length - 1];
+    filaLinea({ texto: '', vozId: ult ? $('.l-voz', ult).value : (voces[0] || {}).id, estilo: 'emocionado', tipo: 'venta' });
+  };
+
+  const datosEditados = () => ({
+    titulo: $('.sp-titulo', item).value,
+    musicaPrompt: $('.sp-musica', item).value,
+    conMusica: $('.sp-conmusica', item).checked,
+    capsulas: [...cont.children].map(f => ({
+      texto: $('.l-texto', f).value, vozId: $('.l-voz', f).value, estilo: $('.l-estilo', f).value,
+      tipo: $('.l-tipo', f) ? $('.l-tipo', f).value : 'venta', personaje: f.dataset.personaje,
+    })),
+  });
+  $('.sp-guardar', item).onclick = async () => {
+    try { await api('/api/spots/' + sp.id, { method: 'PATCH', body: JSON.stringify(datosEditados()) }); toast('Cambios guardados 💾'); }
+    catch (e) { toast(e.message); }
+  };
+  $('.sp-producir', item).onclick = async () => {
+    const d = datosEditados();
+    if (!d.capsulas.some(x => x.texto.trim())) return toast('Escribe al menos una línea');
+    if (!confirm('¿Producir el audio? Gasta créditos de tu plan de ElevenLabs (voces' + (d.conMusica ? ' + música' : '') + ').')) return;
+    try {
+      await api('/api/spots/' + sp.id, { method: 'PATCH', body: JSON.stringify(d) });
+      await api('/api/spots/' + sp.id + '/producir', { method: 'POST' });
+      toast('🎙️ Produciendo… te aviso cuando esté listo');
+      renderSpots();
+    } catch (e) { toast(e.message); }
+  };
+  $('.sp-borrar', item).onclick = async () => {
+    if (!confirm('¿Eliminar "' + (sp.titulo || 'este spot') + '"?')) return;
+    await api('/api/spots/' + sp.id, { method: 'DELETE' }); renderSpots();
+  };
+  return item;
 }
 
 // ---------- REPORTES ----------

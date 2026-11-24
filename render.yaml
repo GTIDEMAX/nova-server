@@ -48,6 +48,9 @@ services:
       # Clave para que tu bot de WhatsApp mande los recordatorios (ver agente-social/BOT.md)
       - key: BOT_TOKEN
         generateValue: true
+      # ElevenLabs (seccion Spots: voces, musica y efectos)
+      - key: ELEVENLABS_API_KEY
+        sync: false
       # Web / blog (opcional)
       - key: WEB_PUBLISH_WEBHOOK
         sync: false

@@ -135,4 +135,79 @@ function demoRespuesta(empresa, cliente, texto) {
   );
 }
 
-module.exports = { generarContenido, redactarRespuesta, hayClave, MODELO };
+// --- Guion de spot de audio (para la seccion Spots) ---
+// formato 'spot' = 1 anuncio de 25-40 s; 'dialogo' = spot con 2 personajes (A y B);
+// 'bocina' = capsulas cortas para la bocina de la tienda.
+async function escribirGuionSpot({ empresa, idea, formato, estilo }) {
+  const bocina = formato === 'bocina';
+  const dialogo = formato === 'dialogo';
+  const n = bocina ? 8 : 1;
+  if (!hayClave) return demoGuion(empresa, idea, bocina, n, dialogo);
+
+  const system =
+    `Eres un creativo de radio mexicano experto en spots que venden. Escribes guiones para locutor ` +
+    `de la empresa "${empresa.nombre}" (rubro: ${empresa.rubro || 'general'}; publico: ${empresa.publico || 'clientes locales'}; ` +
+    `tono: ${empresa.tono || 'cercano y con energia'}). Reglas OBLIGATORIAS:\n` +
+    `1) NO INVENTES datos: usa solo precios, promociones, telefonos, direcciones, redes y productos que vengan en la idea del dueno. Si no vienen, no los menciones.\n` +
+    `2) Escribe para el oido: frases cortas, naturales, como habla un locutor mexicano con energia. Nada de groserias ni burlas.\n` +
+    `3) Numeros y telefonos escritos con letras como se dicen (ej. "dos, cuatro, uno... tres, tres, nueve").\n` +
+    `4) Escribe el nombre de la marca como se pronuncia en espanol (ej. "Voltum" -> "Vóltum") para que la voz lo diga bien.\n` +
+    `5) Usa "..." para pausas y signos de exclamacion para dar energia. No pongas acotaciones ni etiquetas entre corchetes.`;
+
+  const user = dialogo
+    ? `Idea del dueno: "${idea}".\nEscribe un spot en DIALOGO entre 2 personajes (A y B) de 30 a 40 segundos leido (80 a 110 palabras en total), ` +
+      `natural y con chispa, que termine con una llamada a la accion (solo con datos que esten en la idea). Cada linea es un elemento de "capsulas" con "personaje": "A" o "B".\n`
+    : bocina
+    ? `Idea del dueno: "${idea}".\nEscribe ${n} capsulas distintas para la bocina de la tienda (para jalar a la gente que pasa). ` +
+      `Cada capsula de 15 a 25 segundos leida (40 a 65 palabras). Mezcla capsulas de VENTA y capsulas de TIP util para el cliente (tipo "tip"), ` +
+      `y que la ultima invite a visitar o escribir (solo con datos que esten en la idea).\n`
+    : `Idea del dueno: "${idea}".\nEscribe UN spot de 25 a 35 segundos leido (70 a 95 palabras), con gancho al inicio y llamada a la accion al final (solo con datos que esten en la idea).\n`;
+  const formatoJSON =
+    `Ademas, describe en INGLES la musica de fondo ideal (estilo: ${estilo || 'moderna y con energia'}), instrumental, sin voces, apta para radio.\n` +
+    `Devuelve UNICAMENTE un objeto JSON con esta forma exacta:\n` +
+    `{"titulo": "titulo corto", "capsulas": [{"tipo": "venta" | "tip", "personaje": "A" | "B", "texto": "lo que dice el locutor"}], "musicaPrompt": "descripcion en ingles"}`;
+
+  const resp = await client.messages.create({
+    model: MODELO,
+    max_tokens: 4000,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'medium' },
+    system,
+    messages: [{ role: 'user', content: user + formatoJSON }],
+  });
+  const texto = textoDe(resp);
+  let obj = null;
+  try { obj = JSON.parse(texto); } catch (_) {
+    const i = texto.indexOf('{'), f = texto.lastIndexOf('}');
+    if (i !== -1 && f !== -1) { try { obj = JSON.parse(texto.slice(i, f + 1)); } catch (_) {} }
+  }
+  if (!obj || !Array.isArray(obj.capsulas) || !obj.capsulas.length) throw new Error('La IA no devolvió un guion válido, intenta otra vez.');
+  return {
+    titulo: String(obj.titulo || 'Spot').slice(0, 80),
+    capsulas: obj.capsulas.slice(0, 16).map((c) => ({
+      tipo: c.tipo === 'tip' ? 'tip' : 'venta', personaje: c.personaje === 'B' ? 'B' : 'A', texto: String(c.texto || '').trim(),
+    })).filter((c) => c.texto),
+    musicaPrompt: String(obj.musicaPrompt || '').trim() || 'Upbeat modern Latin pop instrumental, energetic, radio-ready, no vocals.',
+  };
+}
+
+function demoGuion(empresa, idea, bocina, n, dialogo) {
+  const base = `¡Atención! En ${empresa.nombre} tenemos lo que buscas... ${idea || 'pásale y conócenos'}. ¡Te esperamos!`;
+  if (dialogo) {
+    return {
+      titulo: 'Diálogo ' + empresa.nombre + ' (demo)',
+      capsulas: [
+        { tipo: 'venta', personaje: 'A', texto: '¿Oye, y tú dónde compraste eso?' },
+        { tipo: 'venta', personaje: 'B', texto: `¡En ${empresa.nombre}! ${idea || 'Pásale y conócelos'}.` },
+      ],
+      musicaPrompt: 'Upbeat modern Latin pop instrumental, energetic, radio-ready, no vocals.',
+    };
+  }
+  return {
+    titulo: (bocina ? 'Bocina' : 'Spot') + ' ' + empresa.nombre + ' (demo)',
+    capsulas: Array.from({ length: n }, (_, i) => ({ tipo: bocina && i % 2 ? 'tip' : 'venta', personaje: 'A', texto: base })),
+    musicaPrompt: 'Upbeat modern Latin pop instrumental, energetic, radio-ready, no vocals.',
+  };
+}
+
+module.exports = { generarContenido, redactarRespuesta, escribirGuionSpot, hayClave, MODELO };

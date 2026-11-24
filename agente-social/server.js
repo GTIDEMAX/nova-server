@@ -14,6 +14,7 @@ const scheduler = require('./scheduler');
 const feed = require('./feed');
 const imagen = require('./imagen');
 const recordatorios = require('./recordatorios');
+const spots = require('./spots');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -200,6 +201,107 @@ async function manejarAPI(req, res, ruta) {
       return enviarJSON(res, 200, { ok: true, pausados: n });
     }
     return enviarJSON(res, 404, { error: 'Ruta del bot no encontrada' });
+  }
+
+  // ----- Spots de audio (ElevenLabs) -----
+  if (recurso === 'spots') {
+    if (req.method === 'GET' && !partes[2]) {
+      return enviarJSON(res, 200, { spots: estado.spots || [], eleven: spots.hayEleven(), vozDefault: spots.VOZ_DEFAULT });
+    }
+    if (req.method === 'GET' && partes[2] === 'voces') return enviarJSON(res, 200, await spots.listarVoces());
+
+    // Nuevo guion: lo escribe la IA, o en blanco si 'manual'
+    if (req.method === 'POST' && !partes[2]) {
+      const empresa = buscar('empresas', body.empresaId);
+      if (!empresa) return enviarJSON(res, 400, { error: 'Elige la empresa' });
+      const formato = ['spot', 'dialogo', 'bocina'].includes(body.formato) ? body.formato : 'spot';
+      const vozA = body.vozA || spots.VOZ_DEFAULT;
+      const vozB = body.vozB || vozA;
+      let guion;
+      if (body.manual) {
+        guion = { titulo: 'Spot ' + empresa.nombre, capsulas: [{ tipo: 'venta', personaje: 'A', texto: '' }], musicaPrompt: 'Upbeat modern Latin pop instrumental, energetic, radio-ready, no vocals.' };
+      } else {
+        if (!(body.idea || '').trim()) return enviarJSON(res, 400, { error: 'Escribe la idea del spot' });
+        try { guion = await ia.escribirGuionSpot({ empresa, idea: body.idea, formato, estilo: body.estiloMusica }); }
+        catch (e) { return enviarJSON(res, 502, { error: e.message }); }
+      }
+      const spot = {
+        id: id(), empresaId: empresa.id, idea: body.idea || '', formato, estiloMusica: body.estiloMusica || '',
+        titulo: guion.titulo, musicaPrompt: guion.musicaPrompt, conMusica: true,
+        capsulas: guion.capsulas.map((c) => ({
+          texto: c.texto, tipo: c.tipo, personaje: c.personaje,
+          vozId: (c.personaje === 'B' || (formato === 'bocina' && c.tipo === 'tip')) ? vozB : vozA,
+          estilo: c.tipo === 'tip' ? 'amigable' : 'emocionado',
+        })),
+        estado: 'borrador', creado: new Date().toISOString(),
+      };
+      estado.spots.unshift(spot);
+      guardar();
+      return enviarJSON(res, 201, spot);
+    }
+
+    const spot = partes[2] && (estado.spots || []).find((x) => x.id === partes[2]);
+    if (partes[2] && !spot) return enviarJSON(res, 404, { error: 'Spot no encontrado' });
+
+    // Editar guion (texto, voces, estilos, musica)
+    if (req.method === 'PATCH' && spot) {
+      if (spot.estado === 'produciendo') return enviarJSON(res, 409, { error: 'Espera a que termine de producirse' });
+      if (typeof body.titulo === 'string') spot.titulo = body.titulo.slice(0, 80);
+      if (typeof body.musicaPrompt === 'string') spot.musicaPrompt = body.musicaPrompt.slice(0, 600);
+      if (typeof body.conMusica === 'boolean') spot.conMusica = body.conMusica;
+      if (Array.isArray(body.capsulas)) {
+        spot.capsulas = body.capsulas.slice(0, 20).map((c) => ({
+          texto: String(c.texto || '').slice(0, 1500), tipo: c.tipo === 'tip' ? 'tip' : 'venta',
+          personaje: c.personaje === 'B' ? 'B' : 'A', vozId: String(c.vozId || spots.VOZ_DEFAULT),
+          estilo: Object.keys(spots.ESTILOS).includes(c.estilo) ? c.estilo : 'emocionado',
+        }));
+      }
+      guardar();
+      return enviarJSON(res, 200, spot);
+    }
+
+    // Producir audio (en segundo plano: tarda 1-3 minutos)
+    if (req.method === 'POST' && spot && partes[3] === 'producir') {
+      if (spot.estado === 'produciendo') return enviarJSON(res, 409, { error: 'Ya se está produciendo' });
+      if (!spots.hayEleven()) return enviarJSON(res, 400, { error: 'Falta ELEVENLABS_API_KEY en Render (Environment).' });
+      spot.estado = 'produciendo'; spot.progreso = 'Empezando…'; spot.error = '';
+      guardar();
+      spots.producir(spot, (txt) => { spot.progreso = txt; })
+        .then(async ({ buffer, duracion }) => {
+          const nombre = 'spot-' + spot.id + '.mp3';
+          await store.guardarArchivo(nombre, buffer, 'audio/mpeg');
+          spot.audio = nombre; spot.duracion = duracion; spot.version = (spot.version || 0) + 1;
+          spot.estado = 'listo'; spot.progreso = ''; spot.producido = new Date().toISOString();
+          guardar();
+          console.log(`[spots] ✅ ${spot.titulo} (${duracion}s)`);
+        })
+        .catch((e) => {
+          spot.estado = 'error'; spot.progreso = ''; spot.error = e.message;
+          guardar();
+          console.error('[spots] ❌', e.message);
+        });
+      return enviarJSON(res, 202, spot);
+    }
+
+    // Escuchar / descargar el MP3
+    if (req.method === 'GET' && spot && partes[3] === 'audio') {
+      const buf = spot.audio ? await store.leerArchivo(spot.audio) : null;
+      if (!buf) return enviarJSON(res, 404, { error: 'Este spot aún no tiene audio' });
+      const descargar = /(^|&)descargar=1/.test(req.url.split('?')[1] || '');
+      const nombre = (spot.titulo || 'spot').normalize('NFD').replace(/[^a-zA-Z0-9 _-]/g, '').trim().replace(/\s+/g, '_') || 'spot';
+      res.writeHead(200, {
+        'Content-Type': 'audio/mpeg', 'Content-Length': buf.length, 'Cache-Control': 'no-store',
+        ...(descargar ? { 'Content-Disposition': `attachment; filename="${nombre}.mp3"` } : {}),
+      });
+      return res.end(buf);
+    }
+
+    if (req.method === 'DELETE' && spot) {
+      if (spot.audio) await store.borrarArchivo(spot.audio).catch(() => {});
+      estado.spots = estado.spots.filter((x) => x.id !== spot.id);
+      guardar();
+      return enviarJSON(res, 200, { ok: true });
+    }
   }
 
   // Metricas y reportes
@@ -643,6 +745,10 @@ const server = http.createServer(async (req, res) => {
 });
 
 store.iniciar().then(() => {
+  // Un spot que se estaba produciendo cuando el servidor se reinicio ya no va a terminar
+  for (const sp of estado.spots || []) {
+    if (sp.estado === 'produciendo') { sp.estado = 'error'; sp.error = 'Se reinició el servidor a media producción. Dale "Producir" otra vez.'; }
+  }
   server.listen(PORT, () => {
     console.log('====================================================');
     console.log('  AGENTE SOCIAL en http://localhost:' + PORT);

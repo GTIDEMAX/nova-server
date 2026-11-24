@@ -199,6 +199,15 @@ Si registras una venta antigua, los mensajes atrasados se saltan y solo queda el
 
 > ⚠️ En Render gratis, conecta `MONGODB_URI` (MongoDB Atlas gratis). Si no, la lista de clientes se borra cuando el servidor se reinicia.
 
+## Spots de audio 🎙️ (pestaña Spots)
+
+1. Escoges empresa, **formato** (spot de 30 s, diálogo de 2 voces o bocina para la tienda con cápsulas cada 45 s), **voces** y estilo de **música**, y escribes la idea con los datos reales.
+2. La IA escribe el guion **sin inventar datos** (o lo escribes tú con "Escribirlo yo").
+3. **Todo es editable**: texto de cada línea, la voz de cada línea (cualquiera de tu cuenta de ElevenLabs, con botón ▶ para oír la muestra), cómo lo dice (emocionado, amigable, serio, dramático), agregar/quitar líneas, la música o sin música.
+4. **Producir audio**: graba las voces, compone la música, agrega efectos de radio (en bocina) y mezcla con la música bajando cuando habla el locutor. Tarda 1 a 3 minutos. Queda un **MP3** para escuchar y descargar, guardado en la base de datos.
+
+Requiere `ELEVENLABS_API_KEY` en Render. Cada producción gasta créditos de tu plan de ElevenLabs (voz + música + efectos). ffmpeg viene incluido (paquete `ffmpeg-static`).
+
 ## Autonomía (mixta, como pediste)
 
 - **Contenido** → siempre pasa por tu aprobación antes de publicarse.
