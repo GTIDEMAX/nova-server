@@ -495,9 +495,16 @@ async function renderClientes() {
   catch (e) { c.innerHTML = ''; c.appendChild(el('<div class="empty">No se pudieron cargar los clientes.</div>')); return; }
   c.innerHTML = '';
 
+  const m = datos.modo, env = m.envio || {}, bot = env.bot || {};
+  const etiqueta = m.auto ? 'Automático' : (m.bot ? 'Bot' : '1-toque');
+  const hace = (iso) => { const min = Math.round((Date.now() - new Date(iso)) / 60000); return min < 1 ? 'hace un momento' : min < 60 ? `hace ${min} min` : `hace ${Math.round(min / 60)} h`; };
+  const botTxt = !bot.configurado ? 'sin configurar' : bot.conectado ? `conectado ✅ (revisó ${hace(bot.ultimaConsulta)})` : bot.ultimaConsulta ? `desconectado ⚠️ (última vez ${hace(bot.ultimaConsulta)})` : 'esperando a que se conecte';
+  const espera = env.esperaHasta ? ` Siguiente envío a las ${new Date(env.esperaHasta).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}` : '';
   c.appendChild(el(`<div class="card"><div class="flex-b"><h3>🔋 Recordatorios de batería</h3>
-    <span class="badge ${datos.modo.auto ? 'on' : 'off'}">${datos.modo.auto ? 'Automático' : '1-toque'}</span></div>
-    <div class="muted" style="margin-top:6px">${esc(datos.modo.detalle)}</div></div>`));
+    <span class="badge ${m.auto || m.bot ? 'on' : 'off'}">${etiqueta}</span></div>
+    <div class="muted" style="margin-top:6px">${esc(m.detalle)}</div>
+    ${env.regla ? `<div class="muted" style="margin-top:8px">⏱️ <b>Envío espaciado</b> (bot/automático): ${esc(env.regla)}. Hoy: ${env.enviadosHoy || 0} de ${env.maxDia}.${env.puedeAhora ? '' : ' ' + esc(env.razon)}${esc(espera)}</div>` : ''}
+    <div class="muted" style="margin-top:4px">🤖 Bot de WhatsApp: ${esc(botTxt)}</div></div>`));
 
   // Para enviar hoy
   const hoyCard = el(`<div class="card"><h2>📲 Para enviar hoy (${hoy.pendientes.length})</h2><div></div></div>`);

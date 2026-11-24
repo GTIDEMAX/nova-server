@@ -185,6 +185,10 @@ Si registras una venta antigua, los mensajes atrasados se saltan y solo queda el
      - Meta decide la categoría (utilidad o marketing) y el costo por mensaje.
    - `WHATSAPP_TEMPLATE_RECORDATORIO=recordatorio_bateria` y `RECORDATORIOS_AUTO=1`.
 
+3. **Con tu bot de WhatsApp:** tu bot pide al panel el siguiente mensaje, lo manda y confirma. Ver **[BOT.md](BOT.md)**.
+
+**Envío espaciado (bot y automático):** nunca se mandan de golpe. Un mensaje cada 4–10 minutos al azar, solo de 10:00 a 19:00 (hora de México), máximo 25 al día y nunca 2 al mismo cliente el mismo día. Se ajusta con las variables `RECORDATORIOS_*`.
+
 **Baja:** si el cliente responde **BAJA** (o STOP) por WhatsApp, se pausa solo (con la API conectada). En el panel también puedes **Pausar** o **Eliminar** a cualquier cliente.
 
 > ⚠️ En Render gratis, conecta `MONGODB_URI` (MongoDB Atlas gratis). Si no, la lista de clientes se borra cuando el servidor se reinicia.

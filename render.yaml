@@ -45,6 +45,9 @@ services:
         value: recordatorio_bateria
       - key: WHATSAPP_TEMPLATE_IDIOMA
         value: es_MX
+      # Clave para que tu bot de WhatsApp mande los recordatorios (ver agente-social/BOT.md)
+      - key: BOT_TOKEN
+        generateValue: true
       # Web / blog (opcional)
       - key: WEB_PUBLISH_WEBHOOK
         sync: false

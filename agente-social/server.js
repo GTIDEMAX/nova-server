@@ -4,6 +4,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const store = require('./store');
 const { estado, guardar, id } = store;
@@ -104,7 +105,7 @@ async function manejarAPI(req, res, ruta) {
         enviados: (c.recordatorios || []).filter((r) => r.estado === 'enviado').length,
         total: (c.recordatorios || []).length,
       }));
-      return enviarJSON(res, 200, { clientes: lista, modo: recordatorios.modo() });
+      return enviarJSON(res, 200, { clientes: lista, modo: recordatorios.modo(estado) });
     }
     if (req.method === 'POST' && !partes[2]) {
       const empresa = buscar('empresas', body.empresaId);
@@ -153,7 +154,7 @@ async function manejarAPI(req, res, ruta) {
   if (recurso === 'recordatorios') {
     // Los de hoy (y atrasados), con el enlace de WhatsApp listo
     if (partes[2] === 'hoy' && req.method === 'GET') {
-      return enviarJSON(res, 200, { pendientes: recordatorios.pendientes(estado), modo: recordatorios.modo() });
+      return enviarJSON(res, 200, { pendientes: recordatorios.pendientes(estado), modo: recordatorios.modo(estado) });
     }
     // Marcar como enviado u omitido: /api/recordatorios/:clienteId/:recId/(enviado|omitir)
     if (partes[2] && partes[3] && ['enviado', 'omitir'].includes(partes[4]) && req.method === 'POST') {
@@ -166,6 +167,34 @@ async function manejarAPI(req, res, ruta) {
       guardar();
       return enviarJSON(res, 200, r);
     }
+  }
+
+  // ----- Bot de WhatsApp externo (manda los recordatorios, espaciados) -----
+  // Protegido con BOT_TOKEN (header "x-bot-token"). Ver BOT.md.
+  if (recurso === 'bot') {
+    const esperado = process.env.BOT_TOKEN || '';
+    if (!esperado) return enviarJSON(res, 503, { error: 'Falta configurar BOT_TOKEN en el servidor' });
+    const dado = Buffer.from(String(req.headers['x-bot-token'] || ''));
+    const ok = dado.length === Buffer.byteLength(esperado) && crypto.timingSafeEqual(dado, Buffer.from(esperado));
+    if (!ok) return enviarJSON(res, 401, { error: 'Token del bot incorrecto' });
+
+    // Siguiente mensaje a enviar (uno solo, y solo si ya toca turno)
+    if (partes[2] === 'siguiente' && req.method === 'GET') {
+      return enviarJSON(res, 200, recordatorios.siguienteParaBot(estado, guardar));
+    }
+    // Confirmar resultado: { clienteId, recordatorioId, ok, error }
+    if (partes[2] === 'confirmar' && req.method === 'POST') {
+      const r = recordatorios.confirmarBot(estado, guardar, body.clienteId, body.recordatorioId, body.ok !== false, body.error);
+      if (!r) return enviarJSON(res, 404, { error: 'Recordatorio no encontrado' });
+      return enviarJSON(res, 200, { ok: true, estado: r.estado });
+    }
+    // El cliente respondio BAJA al bot: { telefono }
+    if (partes[2] === 'baja' && req.method === 'POST') {
+      const n = recordatorios.bajaPorTelefono(estado, body.telefono, 'cliente');
+      if (n) guardar();
+      return enviarJSON(res, 200, { ok: true, pausados: n });
+    }
+    return enviarJSON(res, 404, { error: 'Ruta del bot no encontrada' });
   }
 
   // Metricas y reportes
@@ -479,15 +508,7 @@ async function procesarWhatsApp(body) {
         const nombre = (contacto && contacto.profile && contacto.profile.name) || from;
         // Si responde BAJA, se pausan sus recordatorios postventa
         if (/^\s*(baja|stop)\s*\.?\s*$/i.test(m.text.body || '')) {
-          const tel = recordatorios.normalizarTelefono(from);
-          for (const c of estado.clientes || []) {
-            if (recordatorios.normalizarTelefono(c.telefono) === tel && c.activo) {
-              c.activo = false;
-              c.bajaPor = 'cliente';
-              c.baja = new Date().toISOString();
-              console.log(`[whatsapp] ${from} pidió BAJA: recordatorios pausados`);
-            }
-          }
+          if (recordatorios.bajaPorTelefono(estado, from, 'cliente')) console.log(`[whatsapp] ${from} pidió BAJA: recordatorios pausados`);
           guardar();
         }
         // Enruta al negocio dueño de ese numero, o al primero registrado
