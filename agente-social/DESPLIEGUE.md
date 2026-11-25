@@ -38,6 +38,7 @@ En la sección **Environment** del servicio puedes agregar tus claves (si aún n
 - `PANEL_PASSWORD` → **obligatoria**, 12 caracteres o más. Sin ella el panel queda cerrado. Al entrar, el usuario puede ser cualquiera.
 - `ANTHROPIC_API_KEY` → para textos reales con IA (Claude).
 - `META_ACCESS_TOKEN`, `META_PAGE_ID`, `META_IG_USER_ID` → Instagram + Facebook.
+- `PUBLIC_BASE_URL` → la dirección de tu panel, por ejemplo `https://agente-social-2q0l.onrender.com`. Instagram descarga las fotos desde ahí; si falta, se usa la que pone Render y, sin ninguna, Instagram no publica.
 - `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `META_APP_SECRET` → WhatsApp.
 
 Puedes agregarlas ahora o después (cada vez que guardas, se vuelve a desplegar solo).

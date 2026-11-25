@@ -10,7 +10,10 @@
 // que conectes sus credenciales: registran la publicacion y devuelven un id
 // ficticio, para probar el flujo completo sin cuentas reales.
 
-const GRAPH = 'https://graph.facebook.com/v21.0';
+const store = require('./store');
+const imagen = require('./imagen');
+
+const GRAPH = 'https://graph.facebook.com/v27.0';
 
 const ADAPTADORES = {
   instagram: publicarInstagram,
@@ -21,9 +24,19 @@ const ADAPTADORES = {
   blog: publicarWeb,
 };
 
+// Publicar puede tardar: evita que un doble clic o el programador suban lo mismo dos veces
+const enCurso = new Set();
 async function publicar(plataforma, publicacion, empresa) {
-  const fn = ADAPTADORES[plataforma] || publicarGenerico;
-  return fn(publicacion, empresa);
+  if (enCurso.has(publicacion.id)) {
+    return { ok: false, simulado: false, plataforma, error: 'en_curso', nota: 'Esta publicación ya se está publicando, espera un momento.' };
+  }
+  enCurso.add(publicacion.id);
+  try {
+    const fn = ADAPTADORES[plataforma] || publicarGenerico;
+    return await fn(publicacion, empresa);
+  } finally {
+    enCurso.delete(publicacion.id);
+  }
 }
 
 // Une el texto y los hashtags en un solo caption/mensaje.
@@ -106,7 +119,21 @@ async function publicarFacebook(pub, empresa) {
   }
 }
 
-// --- Instagram (requiere imagen; proceso de 2 pasos: crear contenedor + publicar) ---
+// Meta descarga la foto por su cuenta: publicar antes de FINISHED falla
+async function esperarContenedor(contId, token) {
+  const pausa = parseInt(process.env.META_ESPERA_MS, 10) || 5000;
+  for (let i = 0; i < 12; i++) {
+    const r = await fetch(`${GRAPH}/${contId}?fields=status_code,status&access_token=${encodeURIComponent(token)}`);
+    const d = await r.json().catch(() => ({}));
+    if (d.error) throw new Error(`${d.error.message} (codigo ${d.error.code})`);
+    if (d.status_code === 'FINISHED') return;
+    if (d.status_code === 'ERROR' || d.status_code === 'EXPIRED') throw new Error('Instagram rechazó la foto: ' + (d.status || d.status_code));
+    await new Promise((ok) => setTimeout(ok, pausa));
+  }
+  throw new Error('Instagram tardó demasiado en procesar la foto. No se publicó, intenta de nuevo.');
+}
+
+// --- Instagram (requiere imagen; 3 pasos: crear contenedor + esperar + publicar) ---
 async function publicarInstagram(pub, empresa) {
   const igId = (empresa && empresa.metaIgId) || process.env.META_IG_USER_ID;
   if (!process.env.META_ACCESS_TOKEN || !igId) return simulado('instagram', pub, 'Falta conectar el Instagram de esta empresa');
@@ -115,14 +142,22 @@ async function publicarInstagram(pub, empresa) {
     return { ok: false, simulado: false, plataforma: 'instagram', error: 'sin_imagen',
       nota: 'Instagram requiere una imagen: agrega la URL de una imagen a esta publicacion.' };
   }
+  const base = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!base) {
+    return { ok: false, simulado: false, plataforma: 'instagram', error: 'sin_base',
+      nota: 'Falta PUBLIC_BASE_URL en Render: Instagram necesita una dirección pública para leer la foto.' };
+  }
+  let copia;
   try {
-    // Paso 1: crear el contenedor de medios
-    const cont = await graph(`${GRAPH}/${igId}/media`, { image_url: pub.imagenUrl, caption: caption(pub), access_token: token });
-    // Paso 2: publicar el contenedor
+    copia = await imagen.prepararInstagram(pub.imagenUrl);
+    const cont = await graph(`${GRAPH}/${igId}/media`, { image_url: base.replace(/\/+$/, '') + copia, caption: caption(pub), access_token: token });
+    await esperarContenedor(cont.id, token);
     const pubData = await graph(`${GRAPH}/${igId}/media_publish`, { creation_id: cont.id, access_token: token });
     return { ok: true, simulado: false, plataforma: 'instagram', idExterno: pubData.id, nota: 'Publicado en Instagram ✅' };
   } catch (e) {
     return { ok: false, simulado: false, plataforma: 'instagram', error: e.message, nota: 'Error al publicar en Instagram: ' + e.message };
+  } finally {
+    if (copia) await store.borrarArchivo(copia).catch((e) => console.error('[instagram] no se borró la copia:', e.message));
   }
 }
 

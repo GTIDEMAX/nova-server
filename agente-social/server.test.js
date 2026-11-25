@@ -123,3 +123,82 @@ test('el programador no publica dos veces si una vuelta tarda', async () => {
     fs.writeFileSync = guardarArchivoReal;
   }
 });
+
+test('Instagram: prepara la foto, espera a Meta, publica una sola vez y borra la copia', async () => {
+  const adapters = require('./adapters');
+  const imagen = require('./imagen');
+  const store = require('./store');
+  const originales = [globalThis.fetch, imagen.prepararInstagram, store.borrarArchivo];
+  const env = { META_ACCESS_TOKEN: 't', META_ESPERA_MS: '1', PUBLIC_BASE_URL: 'https://panel.test/' };
+  Object.assign(process.env, env);
+  let estados, llamadas, borradas;
+  const preparar = (lista) => { estados = lista; llamadas = []; borradas = []; };
+  imagen.prepararInstagram = async () => '/generated/ig-1.jpg';
+  store.borrarArchivo = async (r) => { borradas.push(r); };
+  globalThis.fetch = async (url, op = {}) => {
+    const u = new URL(url);
+    llamadas.push([op.method || 'GET', u.pathname.split('/').pop(), op.body && op.body.get('image_url')]);
+    const datos = op.method === 'POST' ? { id: u.pathname.endsWith('/media') ? 'cont' : 'final' } : { status_code: estados.length > 1 ? estados.shift() : estados[0] };
+    return new Response(JSON.stringify(datos));
+  };
+  const pub = { id: 'ig', texto: 'hola', imagenUrl: 'https://panel.test/generated/x.png' };
+  const publicar = () => adapters.publicar('instagram', pub, { metaIgId: '9' });
+  const seIntento = () => llamadas.some((l) => l[1] === 'media_publish');
+  try {
+    preparar(['IN_PROGRESS', 'FINISHED']);
+    const [uno, dos] = await Promise.all([publicar(), publicar()]);
+    assert.equal(uno.ok, true, uno.nota);
+    assert.equal(dos.error, 'en_curso');
+    assert.deepEqual(llamadas.map((l) => l[1]), ['media', 'cont', 'cont', 'media_publish']);
+    assert.equal(llamadas[0][2], 'https://panel.test/generated/ig-1.jpg');
+    assert.deepEqual(borradas, ['/generated/ig-1.jpg']);
+
+    for (const malo of ['ERROR', 'EXPIRED', 'IN_PROGRESS']) {
+      preparar([malo]);
+      assert.equal((await publicar()).ok, false, malo);
+      assert.equal(seIntento(), false, malo);
+      assert.equal(borradas.length, 1, malo);
+    }
+
+    delete process.env.PUBLIC_BASE_URL;
+    preparar(['FINISHED']);
+    assert.equal((await publicar()).error, 'sin_base');
+    assert.equal(llamadas.length, 0);
+  } finally {
+    [globalThis.fetch, imagen.prepararInstagram, store.borrarArchivo] = originales;
+    Object.keys(env).forEach((k) => delete process.env[k]);
+  }
+});
+
+const { ffmpeg } = require('./spots');
+const hayFfmpeg = ffmpeg(['-version']).then(() => true, () => false);
+
+test('Instagram: convierte cualquier foto a JPEG dentro de 4:5 y 1.91:1', async (t) => {
+  if (!(await hayFfmpeg)) return t.skip('no hay ffmpeg en este equipo');
+  const imagen = require('./imagen');
+  const store = require('./store');
+  const originales = [globalThis.fetch, store.guardarArchivo];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-'));
+  dirs.push(dir);
+  let copia, cuerpo;
+  globalThis.fetch = async () => new Response(cuerpo);
+  store.guardarArchivo = async (ruta, buf) => { assert.match(ruta, /^\/generated\/ig-.+\.jpg$/); copia = buf; };
+  try {
+    for (const [w, h, ext] of [[1024, 1536, 'png'], [1025, 1535, 'png'], [3000, 800, 'jpg'], [1000, 1000, 'webp'], [4000, 3000, 'jpg'], [101, 777, 'gif']]) {
+      const f = path.join(dir, 'f.' + ext);
+      await ffmpeg(['-f', 'lavfi', '-i', `testsrc=s=${w}x${h}`, '-frames:v', '1', f]);
+      cuerpo = fs.readFileSync(f);
+      await imagen.prepararInstagram('https://x.test/f');
+      const sof = copia.indexOf(Buffer.from('ffc0', 'hex'));
+      const [alto, ancho] = [copia.readUInt16BE(sof + 5), copia.readUInt16BE(sof + 7)];
+      const caso = `${w}x${h} ${ext} -> ${ancho}x${alto}`;
+      assert.equal(copia.readUInt16BE(0), 0xffd8, caso);
+      assert.ok(ancho / alto >= 0.8 && ancho / alto <= 1.91 && ancho <= 1440, caso);
+      assert.ok(copia.length < 8e6, caso);
+    }
+    cuerpo = '#EXTM3U\nfile:///etc/passwd';
+    await assert.rejects(imagen.prepararInstagram('https://x.test/f'), /debe ser JPG/);
+  } finally {
+    [globalThis.fetch, store.guardarArchivo] = originales;
+  }
+});

@@ -14,5 +14,8 @@
     "@anthropic-ai/sdk": "^0.68.0",
     "ffmpeg-static": "^5.2.0",
     "mongodb": "^6.3.0"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.2.0": true
   }
 }

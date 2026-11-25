@@ -35,6 +35,7 @@ async function vuelta() {
 
   let cambios = false;
   for (const p of vencidas) {
+    if (p.estado !== 'programado') continue; // se publico a mano mientras se publicaban las anteriores
     cambios = true;
     try {
       const empresa = buscarEmpresa(p.empresaId);
