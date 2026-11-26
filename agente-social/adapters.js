@@ -11,6 +11,7 @@
 // ficticio, para probar el flujo completo sin cuentas reales.
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
+const store = require('./store');
 
 const ADAPTADORES = {
   instagram: publicarInstagram,
@@ -88,14 +89,56 @@ async function listarPaginasMeta() {
   }
 }
 
-// --- Facebook (publica en el feed de la pagina; permite solo texto o texto+imagen) ---
+// --- Videos: se guardan en la base de datos y se mandan a Meta como archivo ---
+async function bufferDeVideo(pub) {
+  const buf = await store.leerArchivo(pub.video.archivo);
+  if (!buf) throw new Error('No encontré el video guardado; vuelve a subirlo.');
+  return buf;
+}
+
+// Facebook: sube el archivo de video a la pagina (los verticales salen como video/reel)
+async function videoFacebook(pub, pageId, token) {
+  const buf = await bufferDeVideo(pub);
+  const fd = new FormData();
+  fd.append('access_token', token);
+  fd.append('description', caption(pub));
+  fd.append('source', new Blob([buf], { type: pub.video.tipo || 'video/mp4' }), pub.video.nombre || 'video.mp4');
+  const r = await fetch(`https://graph-video.facebook.com/v21.0/${pageId}/videos`, { method: 'POST', body: fd });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.error) throw new Error(data.error ? `${data.error.message} (codigo ${data.error.code})` : `HTTP ${r.status}`);
+  return data;
+}
+
+// Instagram: Reel con subida directa (sin necesitar una URL publica del video).
+// 1) crear contenedor REELS reanudable, 2) mandar los bytes, 3) esperar a que Meta lo procese, 4) publicar.
+async function reelInstagram(pub, igId, token) {
+  const buf = await bufferDeVideo(pub);
+  const cont = await graph(`${GRAPH}/${igId}/media`, { media_type: 'REELS', upload_type: 'resumable', caption: caption(pub), share_to_feed: 'true', access_token: token });
+  const up = await fetch(`https://rupload.facebook.com/ig-api-upload/v21.0/${cont.id}`, {
+    method: 'POST', headers: { Authorization: 'OAuth ' + token, offset: '0', file_size: String(buf.length) }, body: buf,
+  });
+  const upData = await up.json().catch(() => ({}));
+  if (!up.ok || upData.error || upData.success === false) throw new Error('Meta no aceptó el video: ' + (upData.error ? upData.error.message || JSON.stringify(upData.error) : 'HTTP ' + up.status));
+  for (let i = 0; i < 60; i++) { // hasta ~5 minutos
+    await new Promise((r) => setTimeout(r, 5000));
+    const r = await fetch(`${GRAPH}/${cont.id}?fields=status_code,status&access_token=${encodeURIComponent(token)}`);
+    const d = await r.json().catch(() => ({}));
+    if (d.status_code === 'FINISHED') return graph(`${GRAPH}/${igId}/media_publish`, { creation_id: cont.id, access_token: token });
+    if (d.status_code === 'ERROR' || d.status_code === 'EXPIRED') throw new Error('Instagram no pudo procesar el video: ' + (d.status || d.status_code));
+  }
+  throw new Error('Instagram sigue procesando el video; intenta publicar de nuevo en unos minutos.');
+}
+
+// --- Facebook (publica en el feed de la pagina; permite solo texto, texto+imagen o video) ---
 async function publicarFacebook(pub, empresa) {
   const pageId = (empresa && empresa.metaPageId) || process.env.META_PAGE_ID;
   if (!process.env.META_ACCESS_TOKEN || !pageId) return simulado('facebook', pub, 'Falta conectar la página de Facebook de esta empresa');
   const token = await tokenDePagina(pageId);
   try {
     let data;
-    if (pub.imagenUrl) {
+    if (pub.video) {
+      data = await videoFacebook(pub, pageId, token);
+    } else if (pub.imagenUrl) {
       data = await graph(`${GRAPH}/${pageId}/photos`, { url: pub.imagenUrl, caption: caption(pub), access_token: token });
     } else {
       data = await graph(`${GRAPH}/${pageId}/feed`, { message: caption(pub), access_token: token });
@@ -111,6 +154,14 @@ async function publicarInstagram(pub, empresa) {
   const igId = (empresa && empresa.metaIgId) || process.env.META_IG_USER_ID;
   if (!process.env.META_ACCESS_TOKEN || !igId) return simulado('instagram', pub, 'Falta conectar el Instagram de esta empresa');
   const token = (empresa && empresa.metaPageId) ? await tokenDePagina(empresa.metaPageId) : process.env.META_ACCESS_TOKEN;
+  if (pub.video) {
+    try {
+      const d = await reelInstagram(pub, igId, token);
+      return { ok: true, simulado: false, plataforma: 'instagram', idExterno: d.id, nota: 'Reel publicado en Instagram ✅' };
+    } catch (e) {
+      return { ok: false, simulado: false, plataforma: 'instagram', error: e.message, nota: 'Error al publicar el Reel: ' + e.message };
+    }
+  }
   if (!pub.imagenUrl) {
     return { ok: false, simulado: false, plataforma: 'instagram', error: 'sin_imagen',
       nota: 'Instagram requiere una imagen: agrega la URL de una imagen a esta publicacion.' };

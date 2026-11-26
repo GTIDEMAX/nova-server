@@ -71,11 +71,72 @@ function buscar(coleccion, idBuscado) {
   return estado[coleccion].find((x) => x.id === idBuscado);
 }
 
+// ---------- Videos (Reels / videos de Facebook) ----------
+const MAX_VIDEO = 100 * 1024 * 1024;
+function leerBinario(req, max) {
+  return new Promise((resolve, reject) => {
+    const trozos = []; let total = 0;
+    req.on('data', (c) => { total += c.length; if (total > max) { reject(new Error('El video pesa más de 100 MB')); req.destroy(); } else trozos.push(c); });
+    req.on('end', () => resolve(Buffer.concat(trozos)));
+    req.on('error', reject);
+  });
+}
+// Sube el video una sola vez; varias publicaciones (Facebook, Instagram...) lo comparten
+async function subirVideo(req, res) {
+  const tipo = String(req.headers['content-type'] || '').split(';')[0].trim();
+  if (!/^video\/(mp4|quicktime)$/.test(tipo)) return enviarJSON(res, 400, { error: 'Sube un video MP4 o MOV' });
+  let buf;
+  try { buf = await leerBinario(req, MAX_VIDEO); } catch (e) { return enviarJSON(res, 400, { error: e.message }); }
+  if (buf.length < 1000) return enviarJSON(res, 400, { error: 'El video llegó vacío' });
+  const archivo = 'video-' + id();
+  await store.guardarArchivo(archivo, buf, tipo);
+  const nombre = decodeURIComponent(String(req.headers['x-nombre'] || 'video.mp4')).replace(/[^\w.\- ]/g, '_').slice(0, 80);
+  return enviarJSON(res, 201, { video: { archivo, tipo, bytes: buf.length, nombre } });
+}
+// Para ver el video en el panel (con soporte de adelantar/atrasar)
+async function servirVideo(req, res, archivo) {
+  if (!/^video-[a-z0-9]+$/.test(archivo)) return enviarJSON(res, 404, { error: 'Video no encontrado' });
+  const buf = await store.leerArchivo(archivo);
+  if (!buf) return enviarJSON(res, 404, { error: 'Video no encontrado' });
+  const pub = estado.publicaciones.find((p) => p.video && p.video.archivo === archivo);
+  const tipo = (pub && pub.video.tipo) || 'video/mp4';
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+  if (m) {
+    const ini = m[1] ? +m[1] : 0, fin = m[2] ? Math.min(+m[2], buf.length - 1) : buf.length - 1;
+    res.writeHead(206, { 'Content-Type': tipo, 'Content-Range': `bytes ${ini}-${fin}/${buf.length}`, 'Accept-Ranges': 'bytes', 'Content-Length': fin - ini + 1 });
+    return res.end(buf.subarray(ini, fin + 1));
+  }
+  res.writeHead(200, { 'Content-Type': tipo, 'Content-Length': buf.length, 'Accept-Ranges': 'bytes' });
+  res.end(buf);
+}
+
 // ---------- API ----------
 async function manejarAPI(req, res, ruta) {
   const partes = ruta.split('/').filter(Boolean); // ['api', ...]
   const recurso = partes[1];
+  // Los videos llegan como archivo (no JSON): se atienden antes de leer el cuerpo
+  if (recurso === 'videos' && !partes[2] && req.method === 'POST') return subirVideo(req, res);
+  if (recurso === 'videos' && partes[2] && req.method === 'GET') return servirVideo(req, res, partes[2]);
   const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await leerBody(req) : {};
+
+  // Nueva publicacion de video: una por cada red elegida, todas con el mismo video
+  if (recurso === 'publicaciones' && !partes[2] && req.method === 'POST') {
+    const empresa = buscar('empresas', body.empresaId);
+    if (!empresa) return enviarJSON(res, 400, { error: 'Elige la empresa' });
+    const v = body.video || {};
+    if (!/^video-[a-z0-9]+$/.test(v.archivo || '')) return enviarJSON(res, 400, { error: 'Primero sube el video' });
+    const redes = (Array.isArray(body.plataformas) ? body.plataformas : []).filter((p) => ['facebook', 'instagram', 'tiktok'].includes(p));
+    if (!redes.length) return enviarJSON(res, 400, { error: 'Elige al menos una red' });
+    const hashtags = Array.isArray(body.hashtags) ? body.hashtags : [];
+    const creadas = redes.map((plataforma) => ({
+      id: id(), empresaId: empresa.id, plataforma, texto: String(body.texto || ''), hashtags,
+      video: { archivo: v.archivo, tipo: v.tipo || 'video/mp4', bytes: +v.bytes || 0, nombre: v.nombre || 'video.mp4' },
+      estado: 'borrador', creado: new Date().toISOString(),
+    }));
+    estado.publicaciones.push(...creadas);
+    guardar();
+    return enviarJSON(res, 201, { publicaciones: creadas });
+  }
 
   // Estado general (todo lo que necesita el panel)
   if (recurso === 'estado' && req.method === 'GET') {
@@ -403,6 +464,10 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'DELETE') {
       estado.publicaciones = estado.publicaciones.filter((p) => p.id !== pub.id);
       guardar();
+      // El video se borra solo cuando ya ninguna publicacion lo usa
+      if (pub.video && !estado.publicaciones.some((p) => p.video && p.video.archivo === pub.video.archivo)) {
+        store.borrarArchivo(pub.video.archivo).catch(() => {});
+      }
       return enviarJSON(res, 200, { ok: true });
     }
     if (req.method === 'PATCH') {
@@ -479,6 +544,10 @@ async function manejarAPI(req, res, ruta) {
       }
     }
     if (partes[3] === 'publicar' && req.method === 'POST') {
+      if (pub.publicando) return enviarJSON(res, 409, { error: 'Ya se está publicando, espera un momento' });
+      if (pub.estado === 'publicado') return enviarJSON(res, 409, { error: 'Esta publicación ya salió' });
+      pub.publicando = true;
+      try {
       const empresa = buscar('empresas', pub.empresaId);
       const base = baseDeReq(req);
       const pubEnvio = { ...pub, imagenUrl: absolutizar(pub.imagenUrl, base) };
@@ -490,6 +559,7 @@ async function manejarAPI(req, res, ruta) {
       pub.resultadoPublicacion = resultado;
       guardar();
       return enviarJSON(res, 200, { publicacion: pub, resultado });
+      } finally { delete pub.publicando; }
     }
   }
 

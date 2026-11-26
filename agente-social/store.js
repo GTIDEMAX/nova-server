@@ -85,9 +85,34 @@ function guardar() {
 const DIR_ARCHIVOS = path.join(path.dirname(DATA_FILE), 'archivos');
 function rutaLocal(nombre) { return path.join(DIR_ARCHIVOS, nombre.replace(/[^a-zA-Z0-9._-]/g, '_')); }
 
+// MongoDB no acepta documentos de mas de 16 MB: los archivos grandes (videos) se
+// guardan en pedazos de 8 MB ('nombre#0', 'nombre#1'...) y el documento principal
+// solo dice cuantos pedazos tiene.
+const PEDAZO = 8 * 1024 * 1024;
+// Convierte lo que devuelve MongoDB (Binary de BSON) o un Buffer en un Buffer exacto.
+// Ojo: el .buffer de un Buffer/Uint8Array es TODA la memoria de fondo, no solo sus bytes.
+function bufferDe(d) {
+  if (Buffer.isBuffer(d)) return d;
+  if (d instanceof Uint8Array) return Buffer.from(d.buffer, d.byteOffset, d.byteLength);
+  if (d && d._bsontype === 'Binary') {
+    const u = d.buffer, n = typeof d.position === 'number' ? d.position : u.byteLength;
+    return Buffer.from(u.buffer, u.byteOffset, n);
+  }
+  return Buffer.from(d);
+}
+
 async function guardarArchivo(nombre, buffer, tipo) {
   if (modo === 'mongo' && archivos) {
-    await archivos.updateOne({ _id: nombre }, { $set: { data: buffer, tipo, bytes: buffer.length, creado: new Date() } }, { upsert: true });
+    await borrarArchivo(nombre);
+    if (buffer.length <= PEDAZO) {
+      await archivos.updateOne({ _id: nombre }, { $set: { data: buffer, tipo, bytes: buffer.length, creado: new Date() } }, { upsert: true });
+      return;
+    }
+    const partes = Math.ceil(buffer.length / PEDAZO);
+    for (let i = 0; i < partes; i++) {
+      await archivos.updateOne({ _id: `${nombre}#${i}` }, { $set: { data: buffer.subarray(i * PEDAZO, (i + 1) * PEDAZO), parteDe: nombre } }, { upsert: true });
+    }
+    await archivos.updateOne({ _id: nombre }, { $set: { partes, tipo, bytes: buffer.length, creado: new Date() }, $unset: { data: '' } }, { upsert: true });
     return;
   }
   fs.mkdirSync(DIR_ARCHIVOS, { recursive: true });
@@ -98,13 +123,20 @@ async function leerArchivo(nombre) {
   if (modo === 'mongo' && archivos) {
     const doc = await archivos.findOne({ _id: nombre });
     if (!doc) return null;
-    return Buffer.from(doc.data.buffer ? doc.data.buffer : doc.data);
+    if (!doc.partes) return bufferDe(doc.data);
+    const trozos = [];
+    for (let i = 0; i < doc.partes; i++) {
+      const p = await archivos.findOne({ _id: `${nombre}#${i}` });
+      if (!p) return null;
+      trozos.push(bufferDe(p.data));
+    }
+    return Buffer.concat(trozos);
   }
   try { return fs.readFileSync(rutaLocal(nombre)); } catch (e) { return null; }
 }
 
 async function borrarArchivo(nombre) {
-  if (modo === 'mongo' && archivos) { await archivos.deleteOne({ _id: nombre }); return; }
+  if (modo === 'mongo' && archivos) { await archivos.deleteMany({ $or: [{ _id: nombre }, { parteDe: nombre }] }); return; }
   try { fs.unlinkSync(rutaLocal(nombre)); } catch (e) {}
 }
 

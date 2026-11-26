@@ -65,6 +65,16 @@ Con un **token de usuario del sistema** de Meta Business en `META_ACCESS_TOKEN` 
 
 Permisos del token: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`, `business_management`.
 
+### Videos: Reels de Instagram y videos de Facebook 🎬
+
+En **Publicaciones → 🎬 Nuevo video** eliges la empresa, marcas Instagram y/o Facebook, pegas el texto y subes el video (MP4 o MOV, hasta 100 MB). Se crea un borrador por red, todos con el mismo video, para que lo apruebes, lo publiques o lo programes.
+
+- El video se guarda en MongoDB (en pedazos de 8 MB, porque Mongo no acepta documentos de más de 16 MB) y se borra solo cuando ya ninguna publicación lo usa.
+- **Facebook:** se sube el archivo a la página (`graph-video.facebook.com/{página}/videos`).
+- **Instagram:** se publica como **Reel** con subida directa (contenedor `REELS` reanudable → bytes a `rupload.facebook.com` → espera a que Meta lo procese → `media_publish`). No necesita una URL pública del video. Publicar un Reel puede tardar de 1 a 5 minutos.
+- Usa los mismos permisos de arriba (`pages_manage_posts` para Facebook, `instagram_content_publish` para Instagram).
+- TikTok y YouTube todavía no están conectados.
+
 ## Otras plataformas (pendientes de conectar)
 
 | Plataforma          | Qué necesitas                                   |

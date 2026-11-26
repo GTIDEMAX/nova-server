@@ -18,11 +18,17 @@ function buscarEmpresa(id) {
   return estado.empresas.find((e) => e.id === id);
 }
 
+let corriendo = false; // un video de Instagram puede tardar minutos: nunca dos vueltas a la vez
 async function tick() {
+  if (corriendo) return;
+  corriendo = true;
+  try { await vuelta(); } finally { corriendo = false; }
+}
+async function vuelta() {
   ultimaEjecucion = new Date().toISOString();
   const ahora = Date.now();
   const vencidas = estado.publicaciones.filter(
-    (p) => p.estado === 'programado' && p.fechaProgramada && new Date(p.fechaProgramada).getTime() <= ahora
+    (p) => p.estado === 'programado' && !p.publicando && p.fechaProgramada && new Date(p.fechaProgramada).getTime() <= ahora
   );
 
   let cambios = false;
@@ -33,7 +39,9 @@ async function tick() {
       // Absolutiza la imagen si es una ruta local (Meta exige URL publica completa)
       const base = process.env.PUBLIC_BASE_URL || '';
       const pEnvio = p.imagenUrl && p.imagenUrl.startsWith('/') && base ? { ...p, imagenUrl: base + p.imagenUrl } : p;
-      const resultado = await adapters.publicar(p.plataforma, pEnvio, empresa);
+      p.publicando = true;
+      let resultado;
+      try { resultado = await adapters.publicar(p.plataforma, pEnvio, empresa); } finally { delete p.publicando; }
       p.resultadoPublicacion = resultado;
       if (resultado.ok) {
         p.estado = 'publicado';
