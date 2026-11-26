@@ -353,7 +353,7 @@ function tarjetaPublicacion(p) {
   }
   if (p.estado!=='publicado') {
     const b = el('<button class="btn mini">🚀 Publicar ahora</button>');
-    b.onclick = async () => { await guardarTexto(); const r = await api('/api/publicaciones/'+p.id+'/publicar',{method:'POST'}); toast(r.resultado.ok ? (r.resultado.simulado?'Publicado (modo simulado)':'Publicado ✅') : ('⚠️ '+(r.resultado.nota||'Error'))); cargar(); };
+    b.onclick = async () => { await guardarTexto(); const r = await api('/api/publicaciones/'+p.id+'/publicar',{method:'POST'}); toast(r.resultado.ok ? (r.resultado.simulado?'⚠️ No se publicó: falta conectar la cuenta':'Publicado ✅') : ('⚠️ '+(r.resultado.nota||'Error'))); cargar(); };
     acc.appendChild(b);
   }
   const bDel = el('<button class="btn danger mini">Eliminar</button>');
@@ -503,7 +503,7 @@ function tarjetaMensaje(m) {
   const acc = $('.acciones', item);
   if (m.estado==='pendiente') {
     const bEnv = el('<button class="btn ok mini">✓ Aprobar y enviar</button>');
-    bEnv.onclick = async () => { const r = await api('/api/mensajes/'+m.id+'/responder',{method:'POST',body:JSON.stringify({respuesta:$('.m-resp',item).value})}); toast(r.envio.simulado?'Enviado (simulado)':'Enviado'); cargar(); };
+    bEnv.onclick = async () => { const r = await api('/api/mensajes/'+m.id+'/responder',{method:'POST',body:JSON.stringify({respuesta:$('.m-resp',item).value})}); toast(!r.envio.ok?'⚠️ '+(r.envio.nota||'No se envió'):r.envio.simulado?'No se envió (modo simulado)':'Enviado'); cargar(); };
     acc.appendChild(bEnv);
     const bReg = el('<button class="btn sec mini">↻ Regenerar</button>');
     bReg.onclick = async () => { toast('Regenerando…'); await api('/api/mensajes/'+m.id+'/regenerar',{method:'POST'}); cargar(); };

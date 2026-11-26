@@ -4,7 +4,8 @@
   "description": "Agente con IA para gestionar redes sociales, WhatsApp y atencion al cliente de varias empresas",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=18"
@@ -13,5 +14,8 @@
     "@anthropic-ai/sdk": "^0.68.0",
     "ffmpeg-static": "^5.2.0",
     "mongodb": "^6.3.0"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.2.0": true
   }
 }

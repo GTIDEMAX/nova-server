@@ -209,4 +209,4 @@ async function producir(spot, progreso = () => {}) {
   }
 }
 
-module.exports = { hayEleven, listarVoces, producir, ESTILOS, VOZ_DEFAULT };
+module.exports = { ffmpeg, hayEleven, listarVoces, producir, ESTILOS, VOZ_DEFAULT };

@@ -13,12 +13,13 @@ const MAX_INTENTOS = 3;
 
 let timer = null;
 let ultimaEjecucion = null;
+let corriendo = false;
 
 function buscarEmpresa(id) {
   return estado.empresas.find((e) => e.id === id);
 }
 
-let corriendo = false; // un video de Instagram puede tardar minutos: nunca dos vueltas a la vez
+// Si una vuelta tarda mas que el intervalo (un Reel puede tardar minutos), la siguiente publicaria lo mismo dos veces
 async function tick() {
   if (corriendo) return;
   corriendo = true;
@@ -28,22 +29,21 @@ async function vuelta() {
   ultimaEjecucion = new Date().toISOString();
   const ahora = Date.now();
   const vencidas = estado.publicaciones.filter(
-    (p) => p.estado === 'programado' && !p.publicando && p.fechaProgramada && new Date(p.fechaProgramada).getTime() <= ahora
+    (p) => p.estado === 'programado' && p.fechaProgramada && new Date(p.fechaProgramada).getTime() <= ahora
   );
 
   let cambios = false;
   for (const p of vencidas) {
+    if (p.estado !== 'programado') continue; // se publico a mano mientras se publicaban las anteriores
     cambios = true;
     try {
       const empresa = buscarEmpresa(p.empresaId);
       // Absolutiza la imagen si es una ruta local (Meta exige URL publica completa)
-      const base = process.env.PUBLIC_BASE_URL || '';
+      const base = process.env.PUBLIC_BASE_URL || process.env.RENDER_EXTERNAL_URL || '';
       const pEnvio = p.imagenUrl && p.imagenUrl.startsWith('/') && base ? { ...p, imagenUrl: base + p.imagenUrl } : p;
-      p.publicando = true;
-      let resultado;
-      try { resultado = await adapters.publicar(p.plataforma, pEnvio, empresa); } finally { delete p.publicando; }
+      const resultado = await adapters.publicar(p.plataforma, pEnvio, empresa);
       p.resultadoPublicacion = resultado;
-      if (resultado.ok) {
+      if (resultado.ok && !resultado.simulado) {
         p.estado = 'publicado';
         p.publicado = new Date().toISOString();
         p.publicadoPor = 'programador';
