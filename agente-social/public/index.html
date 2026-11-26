@@ -240,6 +240,7 @@ function renderEmpresas() {
 }
 
 // ---------- CREAR CONTENIDO ----------
+const formContenido = {}; // lo elegido sobrevive a la recarga automatica
 function renderContenido() {
   const c = $('#tab-contenido'); c.innerHTML = '';
   if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa en la pestaña Empresas.</div>')); return; }
@@ -260,6 +261,12 @@ function renderContenido() {
     <div id="g-status" class="muted" style="margin-top:10px"></div>
   </div>`);
   c.appendChild(form);
+  ['g-emp','g-plat','g-cant','g-tema'].forEach(id => {
+    const campo = $('#'+id, form);
+    if (formContenido[id] !== undefined && [...(campo.options||[{value:formContenido[id]}])].some(o=>o.value===formContenido[id])) campo.value = formContenido[id];
+    campo.addEventListener('input', () => { formContenido[id] = campo.value; });
+    campo.addEventListener('change', () => { formContenido[id] = campo.value; });
+  });
   $('#g-go', form).onclick = async () => {
     const btn = $('#g-go', form); btn.disabled = true;
     const conImagen = $('#g-img',form) && $('#g-img',form).checked;
@@ -269,7 +276,7 @@ function renderContenido() {
         empresaId: $('#g-emp',form).value, plataforma: $('#g-plat',form).value,
         cantidad: $('#g-cant',form).value, tema: $('#g-tema',form).value, conImagen })});
       toast('Se crearon '+r.publicaciones.length+' borradores');
-      $('#g-status', form).textContent = 'Listo. Míralos en la pestaña Publicaciones para aprobar.';
+      cargar();
     } catch(e){ toast('Error: '+e.message); $('#g-status',form).textContent=''; }
     btn.disabled = false;
   };
@@ -317,7 +324,7 @@ function tarjetaPublicacion(p) {
     const reader = new FileReader();
     reader.onload = async () => {
       bFoto.disabled = true; bFoto.textContent = '📷 Subiendo…';
-      try { await api('/api/publicaciones/'+p.id+'/foto',{method:'POST',body:JSON.stringify({data:reader.result})}); toast('Foto subida ✅'); cargar(); }
+      try { await guardarTexto(); await api('/api/publicaciones/'+p.id+'/foto',{method:'POST',body:JSON.stringify({data:reader.result})}); toast('Foto subida ✅'); cargar(); }
       catch(e){ toast('Error: '+e.message); bFoto.disabled=false; bFoto.textContent='📷 Subir foto'; }
     };
     reader.readAsDataURL(f);
@@ -330,14 +337,14 @@ function tarjetaPublicacion(p) {
     const u = prompt('Pega el enlace (URL) de la imagen — de tu página o de internet:');
     if (!u) return;
     bLink.disabled = true; bLink.textContent = '🔗 Trayendo…';
-    try { await api('/api/publicaciones/'+p.id+'/imagen-url',{method:'POST',body:JSON.stringify({url:u.trim()})}); toast('Imagen lista ✅'); cargar(); }
+    try { await guardarTexto(); await api('/api/publicaciones/'+p.id+'/imagen-url',{method:'POST',body:JSON.stringify({url:u.trim()})}); toast('Imagen lista ✅'); cargar(); }
     catch(e){ toast(e.message); bLink.disabled=false; bLink.textContent='🔗 Traer de un enlace'; }
   };
   if (!p.video) acc.appendChild(bLink);
 
   if (S.imagenActiva && !p.video) {
     const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenUrl?'Regenerar':'Generar')+' imagen IA</button>');
-    bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };
+    bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await guardarTexto(); await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };
     acc.appendChild(bImg);
   }
 
@@ -955,6 +962,8 @@ cargar();
 setInterval(() => {
   const a = document.activeElement;
   if (a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName)) return;
+  // Recargar redibuja todo: no borrar lo que se escribio y aun no se guarda
+  if ([...document.querySelectorAll('section:not([hidden]) textarea, section:not([hidden]) input:not([type=file])')].some(x => x.value !== x.defaultValue && !x.id.startsWith('g-'))) return;
   cargar();
 }, 20000);
 </script>
