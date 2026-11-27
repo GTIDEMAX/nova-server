@@ -531,6 +531,14 @@ async function manejarAPI(req, res, ruta) {
     }
     if (req.method === 'PATCH') {
       // Editar texto, aprobar o programar
+      // Cambiar de empresa (ej. un post de heysong que quedo en G-TiDE): solo si aun no sale
+      if (typeof body.empresaId === 'string' && body.empresaId !== pub.empresaId) {
+        if (pub.estado === 'publicado') return enviarJSON(res, 409, { error: 'Ya se publicó: no se puede cambiar de empresa' });
+        if (!buscar('empresas', body.empresaId)) return enviarJSON(res, 400, { error: 'Esa empresa no existe' });
+        pub.empresaId = body.empresaId;
+        pub.resultadoPublicacion = null; pub.ultimoError = null; pub.intentos = 0;
+        if (pub.estado === 'fallido') pub.estado = 'borrador';
+      }
       if (typeof body.texto === 'string') pub.texto = body.texto;
       if (typeof body.imagenUrl === 'string' && body.imagenUrl !== pub.imagenUrl) { pub.imagenUrl = body.imagenUrl; pub.imagenIA = false; pub.diseno = null; }
       if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim()).slice(0, 30);

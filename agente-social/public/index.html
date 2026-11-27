@@ -309,7 +309,7 @@ function marcaVetada(p, e) {
 function destinoPublicacion(p) {
   const e = S.empresas.find(x => x.id === p.empresaId) || {};
   const vetada = marcaVetada(p, e);
-  if (vetada && p.estado !== 'publicado') return `<div style="margin-top:6px;font-weight:700;color:#ff6b6b">🛑 Menciona "${esc(vetada)}", que no va en ${esc(e.nombre || 'esta empresa')}: NO se publicará. Bórrala o cámbiala de empresa.</div>`;
+  if (vetada && p.estado !== 'publicado') return `<div style="margin-top:6px;font-weight:700;color:#ff6b6b">🛑 Menciona "${esc(vetada)}", que no va en ${esc(e.nombre || 'esta empresa')}: NO se publicará. Bórrala o cámbiala de empresa con el selector de arriba.</div>`;
   let txt = '', ok = true;
   if (p.plataforma === 'facebook') { ok = !!e.metaPageId; txt = ok ? 'Facebook · ' + (e.metaPageNombre || e.metaPageId) : 'esta empresa no tiene página de Facebook conectada: no se publicará'; }
   else if (p.plataforma === 'instagram') { ok = !!e.metaIgId; txt = ok ? 'Instagram · @' + (e.metaIgUsuario || e.metaIgId) : 'esta empresa no tiene Instagram conectado: no se publicará'; }
@@ -319,7 +319,9 @@ function destinoPublicacion(p) {
 function tarjetaPublicacion(p) {
   const item = el(`<div class="item">
     <div class="top">
-      <div><span class="estado e-${p.estado}">${p.estado}</span> <span class="tag">${p.plataforma}</span> <span class="muted">${esc(nombreEmpresa(p.empresaId))}</span></div>
+      <div><span class="estado e-${p.estado}">${p.estado}</span> <span class="tag">${p.plataforma}</span> ${p.estado==='publicado' || S.empresas.length < 2
+        ? `<span class="muted">${esc(nombreEmpresa(p.empresaId))}</span>`
+        : `<select class="p-emp" title="Cambiar de empresa" style="width:auto;display:inline-block;padding:4px 8px;margin:0">${S.empresas.map(e=>`<option value="${e.id}" ${e.id===p.empresaId?'selected':''}>${esc(e.nombre)}</option>`).join('')}</select>`}</div>
     </div>
     ${destinoPublicacion(p)}
     <textarea class="p-texto">${esc(p.texto)}</textarea>
@@ -337,6 +339,11 @@ function tarjetaPublicacion(p) {
     ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${!p.resultadoPublicacion.ok?'🔴 ':p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
   </div>`);
   const acc = $('.acciones', item);
+  if ($('.p-emp', item)) $('.p-emp', item).onchange = async (ev) => {
+    const nueva = ev.target.value;
+    try { await api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({ empresaId: nueva })}); toast('Movida a ' + nombreEmpresa(nueva) + ' ✅'); cargar(); }
+    catch (err) { toast('⚠️ ' + err.message); ev.target.value = p.empresaId; }
+  };
   const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value, hashtags: $('.p-tags',item).value.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : '#'+h), ...($('.p-img',item) ? {imagenUrl: $('.p-img',item).value} : {})})});
 
   const bGuardar = el('<button class="btn sec mini">Guardar cambios</button>');

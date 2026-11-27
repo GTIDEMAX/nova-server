@@ -288,3 +288,14 @@ test('diseño pro: quita el fondo blanco y deja la imagen en 1080x1350 con texto
     [globalThis.fetch, store.guardarArchivo] = originales;
   }
 });
+
+test('una publicación se puede cambiar de empresa mientras no haya salido', async () => {
+  const g = await api('/api/empresas', 'POST', { nombre: 'g-TIDE MEXICO' });
+  const h = await api('/api/empresas', 'POST', { nombre: 'heysong' });
+  const v = await (await fetch(base + '/api/videos', { method: 'POST', headers: { ...auth(CLAVE), 'content-type': 'video/mp4' }, body: crypto.randomBytes(5000) })).json();
+  const { publicaciones: [p] } = await api('/api/publicaciones', 'POST', { empresaId: g.id, plataformas: ['facebook'], texto: 'bocina heysong', video: v.video });
+  const movida = await api('/api/publicaciones/' + p.id, 'PATCH', { empresaId: h.id });
+  assert.equal(movida.empresaId, h.id);
+  const mal = await fetch(base + '/api/publicaciones/' + p.id, { method: 'PATCH', headers: { ...auth(CLAVE), 'content-type': 'application/json' }, body: JSON.stringify({ empresaId: 'no-existe' }) });
+  assert.equal(mal.status, 400);
+});
