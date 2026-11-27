@@ -531,7 +531,7 @@ async function manejarAPI(req, res, ruta) {
       // Editar texto, aprobar o programar
       if (typeof body.texto === 'string') pub.texto = body.texto;
       if (typeof body.imagenUrl === 'string') pub.imagenUrl = body.imagenUrl;
-      if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags;
+      if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim()).slice(0, 30);
       if (body.accion === 'aprobar') pub.estado = 'aprobado';
       if (body.accion === 'programar') {
         pub.estado = 'programado';

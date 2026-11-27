@@ -52,7 +52,10 @@ async function generarContenido({ empresa, plataforma, tema, cantidad }) {
     `Creas publicaciones para la plataforma "${plataforma}" de la empresa "${empresa.nombre}" ` +
     `(rubro: ${empresa.rubro || 'general'}, publico objetivo: ${empresa.publico || 'clientes locales'}). ` +
     `Adapta la longitud y el estilo a la plataforma (Instagram/TikTok mas visual y corto, ` +
-    `LinkedIn mas profesional, web/blog mas extenso).`;
+    `LinkedIn mas profesional, web/blog mas extenso). ` +
+    // sin la fecha el modelo pone el ano de su entrenamiento (#Navidad2024)
+    `Hoy es ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'full' })}: si mencionas un ano o temporada, que sea la actual. ` +
+    `NO inventes precios, promociones, descuentos ni envios gratis: usa solo los que vengan en el tema.`;
 
   const user =
     `Genera ${n} publicaciones distintas sobre: "${tema || 'novedades y promociones del negocio'}".\n` +

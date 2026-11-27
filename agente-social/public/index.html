@@ -228,7 +228,8 @@ function renderEmpresas() {
       const ok = el('<button class="btn ok mini" style="margin-top:8px">Guardar</button>');
       ok.onclick = async () => {
         const p = sel.value === '' ? { id:'', nombre:'', igId:'', igUsuario:'' } : l.paginas[+sel.value];
-        await api('/api/empresas/'+e.id, { method:'PATCH', body: JSON.stringify({ metaPageId:p.id, metaPageNombre:p.nombre, metaIgId:p.igId, metaIgUsuario:p.igUsuario }) });
+        try { await api('/api/empresas/'+e.id, { method:'PATCH', body: JSON.stringify({ metaPageId:p.id, metaPageNombre:p.nombre, metaIgId:p.igId, metaIgUsuario:p.igUsuario }) }); }
+        catch (err) { return toast('⚠️ No se guardó: ' + err.message); }
         toast(p.id ? 'Conectada a ' + p.nombre + ' ✅' : 'Desconectada'); cargar();
       };
       zona.appendChild(el('<div style="margin-bottom:6px">Escoge la página de <b>'+esc(e.nombre)+'</b>:</div>'));
@@ -295,7 +296,8 @@ function tarjetaPublicacion(p) {
       <div><span class="estado e-${p.estado}">${p.estado}</span> <span class="tag">${p.plataforma}</span> <span class="muted">${esc(nombreEmpresa(p.empresaId))}</span></div>
     </div>
     <textarea class="p-texto">${esc(p.texto)}</textarea>
-    <div class="chips">${(p.hashtags||[]).map(h=>`<span class="chip">${esc(h)}</span>`).join('')}</div>
+    <label>Hashtags <small class="muted">(sepáralos con espacios)</small></label>
+    <input class="p-tags" placeholder="#GtideMexico #Navidad" value="${esc((p.hashtags||[]).join(' '))}">
     ${p.video?`<video src="/api/videos/${esc(p.video.archivo)}" controls playsinline preload="metadata" style="width:100%;max-height:420px;border-radius:10px;margin-top:8px;background:#000"></video><div class="muted" style="margin-top:4px">🎬 ${p.plataforma==='instagram'?'Se publica como Reel':'Video'} · ${esc(p.video.nombre||'')} · ${((p.video.bytes||0)/1048576).toFixed(1)} MB</div>`:''}
     ${!p.video && p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:8px">${p.imagenIA?'<div class="muted" style="margin-top:4px">🎨 Imagen sugerida por IA · para el producto real, sube tu foto</div>':''}`:''}
     ${p.video?'':`<label>URL de imagen ${(p.plataforma==='instagram')?'<small class="hs">(obligatoria en Instagram)</small>':'(opcional)'}</label>
@@ -308,7 +310,7 @@ function tarjetaPublicacion(p) {
     ${p.resultadoPublicacion?`<div class="muted" style="margin-top:6px">${!p.resultadoPublicacion.ok?'🔴 ':p.resultadoPublicacion.simulado?'🟡 ':'🟢 '}${esc(p.resultadoPublicacion.nota||'Publicado')}</div>`:''}
   </div>`);
   const acc = $('.acciones', item);
-  const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value, ...($('.p-img',item) ? {imagenUrl: $('.p-img',item).value} : {})})});
+  const guardarTexto = async () => api('/api/publicaciones/'+p.id, {method:'PATCH', body: JSON.stringify({texto: $('.p-texto',item).value, hashtags: $('.p-tags',item).value.split(/[\s,]+/).filter(Boolean).map(h => h.startsWith('#') ? h : '#'+h), ...($('.p-img',item) ? {imagenUrl: $('.p-img',item).value} : {})})});
 
   const bGuardar = el('<button class="btn sec mini">Guardar cambios</button>');
   bGuardar.onclick = async () => { await guardarTexto(); toast('Guardado'); };
