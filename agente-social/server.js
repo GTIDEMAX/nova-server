@@ -1,6 +1,8 @@
 // AGENTE SOCIAL — Backend + panel web
 // Gestiona varias empresas: crea contenido con IA, programa y publica en redes,
 // y redacta respuestas de atencion al cliente (WhatsApp, Instagram, etc.).
+// Las horas que se programan en el panel son de Mexico; Render corre en UTC
+process.env.TZ = process.env.TZ || 'America/Mexico_City';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
