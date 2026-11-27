@@ -299,3 +299,68 @@ test('una publicación se puede cambiar de empresa mientras no haya salido', asy
   const mal = await fetch(base + '/api/publicaciones/' + p.id, { method: 'PATCH', headers: { ...auth(CLAVE), 'content-type': 'application/json' }, body: JSON.stringify({ empresaId: 'no-existe' }) });
   assert.equal(mal.status, 400);
 });
+
+test('resultados: ranking por % de interacción y conclusiones con datos reales', () => {
+  const { analizar } = require('./resultados');
+  const it = (tipo, franja, origen, alcance, inter) => ({ red: 'instagram', tipo, franja, origen, alcance, interacciones: inter, texto: tipo, likes: 0, comentarios: 0 });
+  const r = analizar([it('Reel', 'Noche (5 a 9 pm)', 'Real', 1000, 90), it('Reel', 'Noche (5 a 9 pm)', 'Real', 800, 64), it('Foto', 'Tarde (12 a 5 pm)', 'IA', 1000, 20), it('Foto', 'Tarde (12 a 5 pm)', 'IA', 500, 10)]);
+  assert.equal(r.base, 'tasa');
+  assert.equal(r.mejores[0].tasa, 0.09);
+  assert.equal(r.porTipo[0].clave, 'Reel');
+  assert.ok(r.conclusiones.some((c) => c.includes('"Reel"') && c.includes('"Foto"')));
+  assert.ok(r.conclusiones.some((c) => c.includes('"Real"')));
+  // Sin alcance (falta permiso) se ordena por interacciones
+  assert.equal(analizar([{ likes: 5, comentarios: 1 }, { likes: 9, comentarios: 0 }]).base, 'interacciones');
+});
+
+test('resultados: si Meta no da insights avisa el permiso y usa likes/comentarios', async () => {
+  const resultados = require('./resultados');
+  const fetchReal = global.fetch, tokenReal = process.env.META_ACCESS_TOKEN;
+  process.env.META_ACCESS_TOKEN = 'tok';
+  global.fetch = async (url) => {
+    const u = String(url);
+    const json = (d) => ({ ok: true, json: async () => d });
+    if (u.includes('fields=access_token')) return json({ access_token: 'tok-pagina' });
+    if (u.includes('/media?')) return json({ data: [{ id: 'm1', caption: 'Prueba de sonido', media_type: 'VIDEO', media_product_type: 'REELS', timestamp: '2026-11-20T02:00:00+0000', like_count: 40, comments_count: 5 }] });
+    if (u.includes('/insights')) return json({ error: { message: '(#10) Application does not have permission for this action' } });
+    if (u.includes('/posts?')) return json({ data: [{ id: 'p_1', message: 'Hola', created_time: '2026-11-20T20:00:00+0000', shares: { count: 2 }, reactions: { summary: { total_count: 7 } }, comments: { summary: { total_count: 1 } }, attachments: { data: [{ media_type: 'photo' }] } }] });
+    return json({});
+  };
+  try {
+    const r = await resultados.resultadosEmpresa({ id: 'e-test', metaPageId: 'pg', metaIgId: 'ig' }, [{ texto: 'Prueba de sonido', imagenIA: false }], true);
+    assert.equal(r.total, 2);
+    assert.equal(r.base, 'interacciones');
+    assert.equal(r.mejores[0].tipo, 'Reel');
+    assert.equal(r.mejores[0].interacciones, 45);
+    assert.equal(r.mejores[0].origen, 'Real');
+    assert.equal(r.mejores[1].interacciones, 10);
+    assert.ok(r.avisos.some((a) => a.includes('instagram_manage_insights')));
+    assert.ok(r.avisos.some((a) => a.includes('read_insights')));
+  } finally {
+    global.fetch = fetchReal;
+    if (tokenReal === undefined) delete process.env.META_ACCESS_TOKEN; else process.env.META_ACCESS_TOKEN = tokenReal;
+  }
+});
+
+test('fotos reales y Dame ideas: crea borradores con la foto real, nada se publica', async () => {
+  const emp = await api('/api/empresas', 'POST', { nombre: 'Tienda Ideas' });
+  const png = 'data:image/png;base64,' + Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex').toString('base64');
+  const foto = await api('/api/biblioteca', 'POST', { empresaId: emp.id, producto: 'Bocina X', nota: 'cliente en tienda', data: png });
+  assert.match(foto.url, /^\/uploads\/bib-/);
+  assert.equal((await fetch(base + foto.url)).status, 200);
+  assert.equal((await api('/api/biblioteca', 'POST', { empresaId: emp.id, data: 'data:text/plain;base64,aG9sYQ==' })).error.includes('Formato'), true);
+
+  const res = await api('/api/resultados/' + emp.id);
+  assert.equal(res.total, 0);
+  assert.ok(res.avisos.length);
+
+  const r = await api('/api/ideas', 'POST', { empresaId: emp.id, cantidad: 6 });
+  assert.equal(r.publicaciones.length, 6);
+  assert.ok(r.publicaciones.every((p) => p.estado === 'borrador' && !p.fechaProgramada));
+  assert.ok(r.publicaciones.some((p) => p.imagenUrl === foto.url && p.idea.fotoId === foto.id));
+
+  await api('/api/biblioteca/' + foto.id, 'DELETE');
+  const est = await api('/api/estado');
+  assert.equal(est.biblioteca.filter((f) => f.id === foto.id).length, 0);
+  assert.equal(est.publicaciones.filter((p) => p.empresaId === emp.id && p.estado === 'borrador').length, 6);
+});
