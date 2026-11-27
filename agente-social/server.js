@@ -451,7 +451,7 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'PATCH' && partes[2]) {
       const e = buscar('empresas', partes[2]);
       if (!e) return enviarJSON(res, 404, { error: 'Empresa no encontrada' });
-      const campos = ['nombre', 'rubro', 'tono', 'publico', 'whatsappPhoneId', 'metaPageId', 'metaPageNombre', 'metaIgId', 'metaIgUsuario'];
+      const campos = ['nombre', 'rubro', 'tono', 'publico', 'whatsappPhoneId', 'metaPageId', 'metaPageNombre', 'metaIgId', 'metaIgUsuario', 'noMencionar'];
       for (const k of campos) if (typeof body[k] === 'string') e[k] = body[k].trim();
       if (Array.isArray(body.plataformas)) e.plataformas = body.plataformas;
       if (typeof body.autoResponder === 'boolean') e.autoResponder = body.autoResponder;

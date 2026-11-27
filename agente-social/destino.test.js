@@ -35,3 +35,23 @@ test('cada marca publica solo en su propia página', async () => {
   assert.equal(unica.simulado, false);
   assert.ok(llamadas.some((u) => u.includes('PAGINA_GTIDE')));
 });
+
+test('marcas prohibidas: un texto de heysong nunca sale en G-TiDE', async () => {
+  const adapters = require('./adapters');
+  const llamadas = [];
+  global.fetch = async (url) => { llamadas.push(String(url)); return { ok: true, status: 200, json: async () => ({ id: 'x' }) }; };
+  const gtide = { id: 'g', nombre: 'g-TIDE MEXICO', metaPageId: 'PAGINA_GTIDE', noMencionar: 'heysong, aura' };
+  for (const texto of ['Llegó la bocina HEYSONG Cosmo', 'Nueva heysōng', 'hey song en casa']) {
+    const r = await adapters.publicar('facebook', { id: 'v' + texto, texto, hashtags: [] }, gtide);
+    assert.equal(r.ok, false, texto); assert.equal(r.error, 'marca_bloqueada');
+  }
+  const hashtag = await adapters.publicar('facebook', { id: 'h1', texto: 'Fiesta', hashtags: ['#BocinaCosmo', '#HEYSONG'] }, gtide);
+  assert.equal(hashtag.error, 'marca_bloqueada');
+  assert.equal(llamadas.length, 0, 'no debe llamar a Meta');
+  // palabras normales que contienen otra cosa no se bloquean; su propio contenido sí sale
+  const ok = await adapters.publicar('facebook', { id: 'ok1', texto: 'Reloj R8 PRO sumergible', hashtags: ['#gtide'] }, gtide);
+  assert.equal(ok.ok, true);
+  // la pagina de CEL MAXX sin lista puede hablar de heysong
+  const cel = await adapters.publicar('facebook', { id: 'c1', texto: 'heysong AURA en CEL MAXX', hashtags: [] }, { id: 'c', nombre: 'Celmaxx', metaPageId: 'PAGINA_CEL' });
+  assert.equal(cel.ok, true);
+});

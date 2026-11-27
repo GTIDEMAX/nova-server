@@ -31,6 +31,11 @@ async function publicar(plataforma, publicacion, empresa) {
   if (enCurso.has(publicacion.id)) {
     return { ok: false, simulado: false, plataforma, error: 'en_curso', nota: 'Esta publicación ya se está publicando, espera un momento.' };
   }
+  const vetada = marcaVetada(publicacion, empresa);
+  if (vetada) {
+    return { ok: false, simulado: false, plataforma, error: 'marca_bloqueada',
+      nota: `🛑 Bloqueado: menciona "${vetada}", que está en "No mencionar" de ${empresa.nombre}. No se publicó.` };
+  }
   enCurso.add(publicacion.id);
   try {
     const fn = ADAPTADORES[plataforma] || publicarGenerico;
@@ -38,6 +43,16 @@ async function publicar(plataforma, publicacion, empresa) {
   } finally {
     enCurso.delete(publicacion.id);
   }
+}
+
+// Marcas que una empresa NO debe mencionar (ej. G-TiDE: heysong). Compara sin acentos, mayusculas,
+// espacios ni signos: "HEYSONG", "heysōng", "#Hey_Song" y "hey song" cuentan igual.
+const normal = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function marcaVetada(pub, empresa) {
+  const lista = String((empresa && empresa.noMencionar) || '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+  if (!lista.length) return '';
+  const todo = normal([pub.texto, (pub.hashtags || []).join(' '), pub.video && pub.video.nombre].join(' '));
+  return lista.find((m) => normal(m).length >= 3 && todo.includes(normal(m))) || '';
 }
 
 // Une el texto y los hashtags en un solo caption/mensaje.
@@ -381,4 +396,4 @@ function simulado(plataforma, pub, motivo) {
   };
 }
 
-module.exports = { publicar, listarPaginasMeta, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };
+module.exports = { marcaVetada, publicar, listarPaginasMeta, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };

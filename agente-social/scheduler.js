@@ -51,6 +51,7 @@ async function vuelta() {
       } else {
         p.intentos = (p.intentos || 0) + 1;
         p.ultimoError = resultado.nota || resultado.error || 'Error desconocido';
+        if (resultado.error === 'marca_bloqueada') p.intentos = MAX_INTENTOS; // no tiene caso reintentar
         if (p.intentos >= MAX_INTENTOS) {
           p.estado = 'fallido';
           console.log(`[programador] ❌ Fallido ${p.id} tras ${p.intentos} intentos: ${p.ultimoError}`);
