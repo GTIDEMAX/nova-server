@@ -78,6 +78,12 @@ async function tokenDePagina(pageId) {
   }
 }
 
+// Pagina/Instagram "de respaldo" de las variables de Render: SOLO si hay una sola empresa.
+// Con varias marcas, una empresa sin su pagina conectada NUNCA publica en la pagina de otra.
+function respaldo(variable) {
+  return (store.estado.empresas || []).length <= 1 ? process.env[variable] : undefined;
+}
+
 // Paginas de Facebook (y su Instagram) a las que tiene acceso el token. Para el panel.
 async function listarPaginasMeta() {
   const token = process.env.META_ACCESS_TOKEN;
@@ -144,7 +150,7 @@ async function reelInstagram(pub, igId, token) {
 
 // --- Facebook (publica en el feed de la pagina; permite solo texto, texto+imagen o video) ---
 async function publicarFacebook(pub, empresa) {
-  const pageId = (empresa && empresa.metaPageId) || process.env.META_PAGE_ID;
+  const pageId = (empresa && empresa.metaPageId) || respaldo('META_PAGE_ID');
   if (!process.env.META_ACCESS_TOKEN || !pageId) return simulado('facebook', pub, 'Falta conectar la página de Facebook de esta empresa');
   const token = await tokenDePagina(pageId);
   try {
@@ -178,7 +184,7 @@ async function esperarContenedor(contId, token) {
 
 // --- Instagram (requiere imagen; 3 pasos: crear contenedor + esperar + publicar) ---
 async function publicarInstagram(pub, empresa) {
-  const igId = (empresa && empresa.metaIgId) || process.env.META_IG_USER_ID;
+  const igId = (empresa && empresa.metaIgId) || respaldo('META_IG_USER_ID');
   if (!process.env.META_ACCESS_TOKEN || !igId) return simulado('instagram', pub, 'Falta conectar el Instagram de esta empresa');
   const token = (empresa && empresa.metaPageId) ? await tokenDePagina(empresa.metaPageId) : process.env.META_ACCESS_TOKEN;
   if (pub.video) {

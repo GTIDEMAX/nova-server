@@ -242,6 +242,7 @@ function renderEmpresas() {
 
 // ---------- CREAR CONTENIDO ----------
 const formContenido = {}; // lo elegido sobrevive a la recarga automatica
+const filtroPub = { estado: '', empresa: '' }; // filtros de Publicaciones
 const formVideo = { archivo: null, empresas: null, redes: ['instagram', 'facebook'], texto: '', subiendo: false }; // igual para el video
 function renderContenido() {
   const c = $('#tab-contenido'); c.innerHTML = '';
@@ -291,11 +292,21 @@ function renderContenido() {
 }
 
 // ---------- PUBLICACIONES / APROBACIONES ----------
+// A qué página/cuenta real sale cada publicación (para verificar antes de aprobar)
+function destinoPublicacion(p) {
+  const e = S.empresas.find(x => x.id === p.empresaId) || {};
+  let txt = '', ok = true;
+  if (p.plataforma === 'facebook') { ok = !!e.metaPageId; txt = ok ? 'Facebook · ' + (e.metaPageNombre || e.metaPageId) : 'esta empresa no tiene página de Facebook conectada: no se publicará'; }
+  else if (p.plataforma === 'instagram') { ok = !!e.metaIgId; txt = ok ? 'Instagram · @' + (e.metaIgUsuario || e.metaIgId) : 'esta empresa no tiene Instagram conectado: no se publicará'; }
+  else return '';
+  return `<div class="muted" style="margin-top:6px;font-weight:600;color:${ok ? '#7ee2a8' : '#ffb35c'}">${ok ? '📍 Sale en: ' : '⚠️ '}${esc(txt)}</div>`;
+}
 function tarjetaPublicacion(p) {
   const item = el(`<div class="item">
     <div class="top">
       <div><span class="estado e-${p.estado}">${p.estado}</span> <span class="tag">${p.plataforma}</span> <span class="muted">${esc(nombreEmpresa(p.empresaId))}</span></div>
     </div>
+    ${destinoPublicacion(p)}
     <textarea class="p-texto">${esc(p.texto)}</textarea>
     <label>Hashtags <small class="muted">(sepáralos con espacios)</small></label>
     <input class="p-tags" placeholder="#GtideMexico #Navidad" value="${esc((p.hashtags||[]).join(' '))}">
@@ -453,6 +464,7 @@ async function renderAprobaciones() {
   }
 
   const filtroWrap = el(`<div class="card"><div class="flex-b"><h2>Publicaciones</h2>
+    <select id="f-empresa" style="max-width:200px"><option value="">Todas las empresas</option>${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select>
     <select id="f-estado" style="max-width:200px">
       <option value="">Todos los estados</option>
       <option value="borrador">Borradores</option>
@@ -464,13 +476,17 @@ async function renderAprobaciones() {
   c.appendChild(filtroWrap);
   const cont = el('<div></div>'); c.appendChild(cont);
   const pintar = () => {
-    const f = $('#f-estado', filtroWrap).value;
+    const f = filtroPub.estado = $('#f-estado', filtroWrap).value;
+    const fe = filtroPub.empresa = $('#f-empresa', filtroWrap).value;
     cont.innerHTML = '';
-    const lista = S.publicaciones.filter(p=>!f||p.estado===f).reverse();
+    const lista = S.publicaciones.filter(p=>(!f||p.estado===f) && (!fe||p.empresaId===fe)).reverse();
     if (!lista.length) { cont.appendChild(el('<div class="empty">No hay publicaciones. Crea contenido en la pestaña Crear contenido.</div>')); return; }
     lista.forEach(p => cont.appendChild(tarjetaPublicacion(p)));
   };
+  $('#f-estado', filtroWrap).value = filtroPub.estado;
+  $('#f-empresa', filtroWrap).value = S.empresas.some(e => e.id === filtroPub.empresa) ? filtroPub.empresa : '';
   $('#f-estado', filtroWrap).onchange = pintar;
+  $('#f-empresa', filtroWrap).onchange = pintar;
   pintar();
 }
 
