@@ -57,6 +57,45 @@ async function generarImagen(prompt, id) {
   return ruta;
 }
 
+// Lee una foto de internet con limite de tiempo y tamano.
+async function leerFoto(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error('No se pudo leer la foto (HTTP ' + r.status + ')');
+  const b = Buffer.from(await r.arrayBuffer());
+  if (b.length > 20 * 1024 * 1024) throw new Error('La foto es muy grande (max 20 MB)');
+  return b;
+}
+
+// Foto pro: la IA pone el producto REAL (la foto que ya tiene la publicacion) en una escena
+// de anuncio. A diferencia de generarImagen, no inventa el producto.
+async function fotoPro(url, escena, id) {
+  const clave = process.env.IMAGE_API_KEY || process.env.OPENAI_API_KEY;
+  if (!clave) return null;
+  const foto = await leerFoto(url);
+  const tipo = formato(foto);
+  if (!tipo || tipo === 'gif') throw new Error('La foto debe ser JPG, PNG o WEBP');
+  const prompt =
+    'Professional advertising photo for social media. Keep the product from the input image EXACTLY as it is: ' +
+    'same shape, colors, proportions, buttons, logos and printed text. Do not redraw, restyle or invent product details. ' +
+    `Place it in a premium scene that suits it: ${escena || 'modern lifestyle setting'}. ` +
+    'Dramatic professional lighting, subtle electric-blue accents, realistic shadows and reflections, shallow depth of field. ' +
+    'No added text, no extra logos, no watermarks.';
+  const form = new FormData();
+  form.append('model', MODEL);
+  form.append('prompt', prompt);
+  form.append('size', '1024x1536');
+  form.append('quality', process.env.IMAGE_QUALITY || 'medium');
+  form.append('image[]', new Blob([foto], { type: 'image/' + tipo.replace('_pipe', '') }), 'producto.' + tipo.replace('_pipe', ''));
+  const r = await fetch('https://api.openai.com/v1/images/edits', { method: 'POST', headers: { Authorization: 'Bearer ' + clave }, body: form });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.error) throw new Error(data.error ? data.error.message : 'HTTP ' + r.status);
+  const b64 = data.data && data.data[0] && data.data[0].b64_json;
+  if (!b64) throw new Error('La IA no devolvio imagen');
+  const ruta = '/generated/pro-' + (id || store.id()) + '.png';
+  await store.guardarArchivo(ruta, Buffer.from(b64, 'base64'), 'image/png');
+  return ruta;
+}
+
 // Formato real segun los primeros bytes. Se le impone a ffmpeg para que un archivo
 // disfrazado de foto (p. ej. una lista de reproduccion) no pueda leer otros archivos.
 function formato(b) {
@@ -79,10 +118,7 @@ const FILTRO_IG = [
 
 // Deja la foto como la pide Instagram y devuelve la ruta publica de la copia.
 async function prepararInstagram(url) {
-  const r = await fetch(url, { signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error('No se pudo leer la foto (HTTP ' + r.status + ')');
-  const original = Buffer.from(await r.arrayBuffer());
-  if (original.length > 20 * 1024 * 1024) throw new Error('La foto es muy grande (max 20 MB)');
+  const original = await leerFoto(url);
   const tipo = formato(original);
   if (!tipo) throw new Error('La foto debe ser JPG, PNG, WEBP o GIF');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ig-'));
@@ -99,4 +135,4 @@ async function prepararInstagram(url) {
   }
 }
 
-module.exports = { prepararInstagram, generarImagen, construirPrompt, hayImagen };
+module.exports = { fotoPro, prepararInstagram, generarImagen, construirPrompt, hayImagen };

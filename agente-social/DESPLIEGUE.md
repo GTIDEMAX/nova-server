@@ -39,6 +39,7 @@ En la sección **Environment** del servicio puedes agregar tus claves (si aún n
 - `ANTHROPIC_API_KEY` → para textos reales con IA (Claude).
 - `META_ACCESS_TOKEN`, `META_PAGE_ID`, `META_IG_USER_ID` → Instagram + Facebook.
 - `PUBLIC_BASE_URL` → la dirección de tu panel, por ejemplo `https://agente-social-2q0l.onrender.com`. Instagram descarga las fotos desde ahí; si falta, se usa la que pone Render y, sin ninguna, Instagram no publica.
+- `IMAGE_API_KEY` → llave de OpenAI (platform.openai.com). Activa el botón **🎨 Foto pro con IA**: pone la foto real del producto en una escena de anuncio (unos $0.06 USD por foto).
 - `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, `META_APP_SECRET` → WhatsApp.
 
 Puedes agregarlas ahora o después (cada vez que guardas, se vuelve a desplegar solo).

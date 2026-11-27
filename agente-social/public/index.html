@@ -299,7 +299,7 @@ function tarjetaPublicacion(p) {
     <label>Hashtags <small class="muted">(sepáralos con espacios)</small></label>
     <input class="p-tags" placeholder="#GtideMexico #Navidad" value="${esc((p.hashtags||[]).join(' '))}">
     ${p.video?`<video src="/api/videos/${esc(p.video.archivo)}" controls playsinline preload="metadata" style="width:100%;max-height:420px;border-radius:10px;margin-top:8px;background:#000"></video><div class="muted" style="margin-top:4px">🎬 ${p.plataforma==='instagram'?'Se publica como Reel':'Video'} · ${esc(p.video.nombre||'')} · ${((p.video.bytes||0)/1048576).toFixed(1)} MB</div>`:''}
-    ${!p.video && p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:8px">${p.imagenIA?'<div class="muted" style="margin-top:4px">🎨 Imagen sugerida por IA · para el producto real, sube tu foto</div>':''}`:''}
+    ${!p.video && p.imagenUrl?`<img src="${esc(p.imagenUrl)}" alt="" style="width:100%;max-height:320px;object-fit:cover;border-radius:10px;margin-top:8px">${p.imagenIA?(p.imagenOriginal?'<div class="muted" style="margin-top:4px">🎨 Foto mejorada con IA · revisa que el producto se vea igual al real</div>':'<div class="muted" style="margin-top:4px">🎨 Imagen sugerida por IA · para el producto real, sube tu foto</div>'):''}`:''}
     ${p.video?'':`<label>URL de imagen ${(p.plataforma==='instagram')?'<small class="hs">(obligatoria en Instagram)</small>':'(opcional)'}</label>
     <input class="p-img" placeholder="https://…/imagen.jpg" value="${esc(p.imagenUrl||'')}">`}
     ${p.estado!=='publicado'?`<label>Programar para (fecha y hora)</label><input type="datetime-local" class="p-fecha" value="${esc(p.fechaProgramada||'')}">`:''}
@@ -345,7 +345,7 @@ function tarjetaPublicacion(p) {
   if (!p.video) acc.appendChild(bLink);
 
   if (S.imagenActiva && !p.video) {
-    const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenUrl?'Regenerar':'Generar')+' imagen IA</button>');
+    const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenOriginal||(p.imagenUrl&&!p.imagenIA)?(p.imagenIA?'Otra foto pro':'Foto pro con IA'):(p.imagenUrl?'Regenerar imagen IA':'Generar imagen IA'))+'</button>');
     bImg.onclick = async () => { bImg.disabled=true; bImg.textContent='🎨 Creando…'; try{ await guardarTexto(); await api('/api/publicaciones/'+p.id+'/imagen',{method:'POST'}); toast('Imagen creada'); cargar(); }catch(e){ toast('Error: '+e.message); bImg.disabled=false; } };
     acc.appendChild(bImg);
   }

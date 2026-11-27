@@ -231,3 +231,31 @@ test('videos: se suben con contraseña, se comparten entre redes y se borran al 
   await new Promise((ok) => setTimeout(ok, 100));
   assert.equal((await bajar()).status, 404);
 });
+
+test('foto pro: manda la foto real del producto a la IA y guarda el resultado', async () => {
+  const imagen = require('./imagen');
+  const store = require('./store');
+  const originales = [globalThis.fetch, store.guardarArchivo];
+  process.env.IMAGE_API_KEY = 'k';
+  const jpg = Buffer.from('ffd8ffe000104a464946', 'hex');
+  let enviado, guardado;
+  globalThis.fetch = async (url, op = {}) => {
+    if (url === 'https://tienda.test/sh80.jpg') return new Response(jpg);
+    enviado = { url, form: op.body };
+    return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from('png').toString('base64') }] }));
+  };
+  store.guardarArchivo = async (ruta, b) => { guardado = [ruta, b.toString()]; };
+  try {
+    const ruta = await imagen.fotoPro('https://tienda.test/sh80.jpg', 'beach party', 'x1');
+    assert.equal(enviado.url, 'https://api.openai.com/v1/images/edits');
+    const foto = enviado.form.get('image[]');
+    assert.equal(foto.type, 'image/jpeg');
+    assert.deepEqual(Buffer.from(await foto.arrayBuffer()), jpg);
+    assert.match(enviado.form.get('prompt'), /EXACTLY.*beach party/s);
+    assert.deepEqual(guardado, ['/generated/pro-x1.png', 'png']);
+    assert.equal(ruta, '/generated/pro-x1.png');
+  } finally {
+    [globalThis.fetch, store.guardarArchivo] = originales;
+    delete process.env.IMAGE_API_KEY;
+  }
+});

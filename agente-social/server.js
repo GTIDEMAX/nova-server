@@ -530,7 +530,7 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'PATCH') {
       // Editar texto, aprobar o programar
       if (typeof body.texto === 'string') pub.texto = body.texto;
-      if (typeof body.imagenUrl === 'string') pub.imagenUrl = body.imagenUrl;
+      if (typeof body.imagenUrl === 'string' && body.imagenUrl !== pub.imagenUrl) { pub.imagenUrl = body.imagenUrl; pub.imagenIA = false; }
       if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim()).slice(0, 30);
       if (body.accion === 'aprobar') pub.estado = 'aprobado';
       if (body.accion === 'programar') {
@@ -585,6 +585,15 @@ async function manejarAPI(req, res, ruta) {
       if (!imagen.hayImagen) return enviarJSON(res, 400, { error: 'Falta IMAGE_API_KEY para generar imagenes con IA' });
       const empresa = buscar('empresas', pub.empresaId);
       try {
+        // Con foto real del producto, la IA la mejora; sin foto, crea una imagen desde cero
+        if (!pub.imagenIA) pub.imagenOriginal = pub.imagenUrl || '';
+        if (pub.imagenOriginal) {
+          pub.imagenUrl = await imagen.fotoPro(absolutizar(pub.imagenOriginal, baseDeReq(req)), pub.imagenPrompt || body.imagenPrompt, pub.id + '-' + Date.now().toString(36));
+          pub.imagenIA = true;
+          pub.imagenError = null;
+          guardar();
+          return enviarJSON(res, 200, { publicacion: pub });
+        }
         const prompt = imagen.construirPrompt({ empresa, plataforma: pub.plataforma, texto: pub.texto, imagenPrompt: pub.imagenPrompt || body.imagenPrompt });
         const url = await imagen.generarImagen(prompt, pub.id + '-' + Date.now().toString(36));
         pub.imagenUrl = url;
