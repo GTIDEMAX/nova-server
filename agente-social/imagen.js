@@ -135,4 +135,61 @@ async function prepararInstagram(url) {
   }
 }
 
-module.exports = { fotoPro, prepararInstagram, generarImagen, construirPrompt, hayImagen };
+// --- Diseno pro gratis: la foto del producto sobre fondo oscuro con brillo azul y textos ---
+const FUENTES = path.join(__dirname, 'fonts');
+// Ruta para un filtro de ffmpeg (en Windows "E:" rompe el filtro si no se escapa)
+const rutaFiltro = (r) => "'" + r.replace(/\\/g, '/').replace(/:/g, '\\:') + "'";
+
+function texto(dir, nombre, valor, fuente, tam, color, y) {
+  const archivo = path.join(dir, nombre + '.txt');
+  fs.writeFileSync(archivo, valor);
+  return `drawtext=fontfile=${rutaFiltro(path.join(FUENTES, fuente))}:textfile=${rutaFiltro(archivo)}:expansion=none:` +
+    `fontsize=${tam}:fontcolor=${color}:x=(w-text_w)/2:y=${y}`;
+}
+// Achica la letra si el texto es largo, para que quepa en 1000 px
+const tamPara = (t, max, factor) => Math.min(max, Math.floor(factor / Math.max(t.length, 1)));
+
+async function disenoPro(url, { marca = '', titulo = '', detalle = '', precio = '', antes = '', web = '' } = {}, id) {
+  const foto = await leerFoto(url);
+  const tipo = formato(foto);
+  if (!tipo) throw new Error('La foto debe ser JPG, PNG, WEBP o GIF');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'diseno-'));
+  try {
+    const entrada = path.join(tmp, 'entrada');
+    fs.writeFileSync(entrada, foto);
+    // Color de la esquina: si es fondo claro y opaco se quita; si ya es transparente se deja
+    const esquina = path.join(tmp, 'esquina.rgba');
+    await ffmpeg(['-f', tipo, '-i', entrada, '-frames:v', '1', '-vf', 'format=rgba,crop=1:1:3:3', '-f', 'rawvideo', esquina]);
+    const [r, g, b, a] = fs.readFileSync(esquina);
+    const quitarFondo = a > 128 && (r + g + b) / 3 > 170;
+    const hex = (n) => n.toString(16).padStart(2, '0');
+    const glow = (base, fuerza) => `'${base}+${fuerza}*exp(-(pow(X-540,2)+pow(Y-640,2))/110000)'`;
+    const textos = [
+      marca && texto(tmp, 'marca', marca.toUpperCase(), 'Montserrat-ExtraBold.ttf', 34, '0x4da3ff', 56),
+      titulo && texto(tmp, 'titulo', titulo, 'Montserrat-ExtraBold.ttf', tamPara(titulo, 76, 1700), 'white', 110),
+      detalle && texto(tmp, 'detalle', detalle, 'Montserrat-SemiBold.ttf', tamPara(detalle, 40, 1750), '0xa9cfff', 215),
+      precio
+        ? texto(tmp, 'precio', precio, 'Montserrat-ExtraBold.ttf', 112, 'white', 1075)
+        : texto(tmp, 'precio', 'Pregunta en sucursal', 'Montserrat-ExtraBold.ttf', 64, 'white', 1110),
+      antes && texto(tmp, 'antes', 'Antes ' + antes, 'Montserrat-SemiBold.ttf', 40, '0x8892a6', 1205),
+      web && texto(tmp, 'web', web, 'Montserrat-SemiBold.ttf', 34, '0xd8e6ff', 1275),
+    ].filter(Boolean);
+    const filtro = [
+      `[0]format=rgb24,geq=r=${glow(7, 22)}:g=${glow(11, 85)}:b=${glow(24, 200)}[fondo]`,
+      `[1]scale=860:760:force_original_aspect_ratio=decrease,format=rgba` +
+        (quitarFondo ? `,colorkey=0x${hex(r)}${hex(g)}${hex(b)}:0.12:0.06` : '') + '[prod]',
+      `[fondo][prod]overlay=(W-w)/2:290+(760-h)/2:format=rgb,drawbox=x=0:y=1060:w=iw:h=290:color=0x050810@0.55:t=fill,` +
+        textos.join(',') + ',format=yuvj420p',
+    ].join(';');
+    const salida = path.join(tmp, 'salida.jpg');
+    await ffmpeg(['-f', 'lavfi', '-i', 'color=c=black:s=1080x1350', '-f', tipo, '-i', entrada,
+      '-filter_complex', filtro, '-frames:v', '1', '-q:v', '2', '-map_metadata', '-1', salida]);
+    const ruta = '/generated/diseno-' + (id || store.id()) + '.jpg';
+    await store.guardarArchivo(ruta, fs.readFileSync(salida), 'image/jpeg');
+    return ruta;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+module.exports = { disenoPro, fotoPro, prepararInstagram, generarImagen, construirPrompt, hayImagen };

@@ -259,3 +259,32 @@ test('foto pro: manda la foto real del producto a la IA y guarda el resultado', 
     delete process.env.IMAGE_API_KEY;
   }
 });
+
+test('diseño pro: quita el fondo blanco y deja la imagen en 1080x1350 con textos', async (t) => {
+  if (!(await hayFfmpeg)) return t.skip('no hay ffmpeg en este equipo');
+  const imagen = require('./imagen');
+  const store = require('./store');
+  const originales = [globalThis.fetch, store.guardarArchivo];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'diseno-'));
+  dirs.push(dir);
+  // "producto": cuadro rojo sobre fondo blanco
+  const f = path.join(dir, 'p.jpg');
+  await ffmpeg(['-f', 'lavfi', '-i', 'color=white:s=800x800', '-vf', 'drawbox=x=300:y=300:w=200:h=200:color=red:t=fill', '-frames:v', '1', f]);
+  let salida;
+  globalThis.fetch = async () => new Response(fs.readFileSync(f));
+  store.guardarArchivo = async (ruta, b) => { assert.match(ruta, /^\/generated\/diseno-.+\.jpg$/); salida = b; };
+  try {
+    await imagen.disenoPro('https://x.test/p', { marca: 'G-TIDE', titulo: 'Bocina 100% "pro" \ ñ', detalle: '40W · RGB', precio: '$759', antes: '$969', web: 'celmaxxgtide.com' });
+    const out = path.join(dir, 'o.jpg');
+    fs.writeFileSync(out, salida);
+    const pixel = async (x, y) => { const p = path.join(dir, 'px'); await ffmpeg(['-i', out, '-vf', `format=rgb24,crop=1:1:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', p]); return [...fs.readFileSync(p)]; };
+    const sof = salida.indexOf(Buffer.from('ffc0', 'hex'));
+    assert.deepEqual([salida.readUInt16BE(sof + 7), salida.readUInt16BE(sof + 5)], [1080, 1350]);
+    const [r, g, b] = await pixel(540, 670); // centro: el producto rojo
+    assert.ok(r > 180 && g < 90 && b < 90, 'producto ' + [r, g, b]);
+    const fondo = await pixel(250, 400); // donde estaba el blanco de la foto: ahora fondo oscuro
+    assert.ok(fondo.every((v, i) => v < (i === 2 ? 240 : 120)), 'fondo ' + fondo);
+  } finally {
+    [globalThis.fetch, store.guardarArchivo] = originales;
+  }
+});

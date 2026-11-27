@@ -530,7 +530,7 @@ async function manejarAPI(req, res, ruta) {
     if (req.method === 'PATCH') {
       // Editar texto, aprobar o programar
       if (typeof body.texto === 'string') pub.texto = body.texto;
-      if (typeof body.imagenUrl === 'string' && body.imagenUrl !== pub.imagenUrl) { pub.imagenUrl = body.imagenUrl; pub.imagenIA = false; }
+      if (typeof body.imagenUrl === 'string' && body.imagenUrl !== pub.imagenUrl) { pub.imagenUrl = body.imagenUrl; pub.imagenIA = false; pub.diseno = null; }
       if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim()).slice(0, 30);
       if (body.accion === 'aprobar') pub.estado = 'aprobado';
       if (body.accion === 'programar') {
@@ -553,7 +553,7 @@ async function manejarAPI(req, res, ruta) {
       const url = '/uploads/' + pub.id + '-' + Date.now().toString(36) + '.' + ext;
       await store.guardarArchivo(url, buffer, MIME['.' + ext]);
       pub.imagenUrl = url;
-      pub.imagenIA = false;
+      pub.imagenIA = false; pub.diseno = null;
       guardar();
       return enviarJSON(res, 200, { publicacion: pub });
     }
@@ -573,11 +573,27 @@ async function manejarAPI(req, res, ruta) {
         const ruta = '/uploads/' + pub.id + '-' + Date.now().toString(36) + '.' + ext;
         await store.guardarArchivo(ruta, buffer, MIME['.' + ext]);
         pub.imagenUrl = ruta;
-        pub.imagenIA = false;
+        pub.imagenIA = false; pub.diseno = null;
         guardar();
         return enviarJSON(res, 200, { publicacion: pub });
       } catch (e) {
         return enviarJSON(res, 400, { error: 'No se pudo traer la imagen: ' + e.message });
+      }
+    }
+    // Diseno pro gratis: la foto del producto con fondo de marca, nombre y precio
+    if (partes[3] === 'diseno' && req.method === 'POST') {
+      if (!pub.diseno && !pub.imagenIA) pub.imagenOriginal = pub.imagenUrl || '';
+      if (!pub.imagenOriginal) return enviarJSON(res, 400, { error: 'Primero pon la foto del producto' });
+      const datos = {};
+      for (const k of ['marca', 'titulo', 'detalle', 'precio', 'antes', 'web']) datos[k] = String(body[k] || '').trim().slice(0, 80);
+      try {
+        pub.imagenUrl = await imagen.disenoPro(absolutizar(pub.imagenOriginal, baseDeReq(req)), datos, pub.id + '-' + Date.now().toString(36));
+        pub.diseno = datos;
+        pub.imagenIA = false;
+        guardar();
+        return enviarJSON(res, 200, { publicacion: pub });
+      } catch (e) {
+        return enviarJSON(res, 500, { error: 'No se pudo hacer el diseño: ' + e.message });
       }
     }
     // (Re)generar imagen con IA para esta publicacion
@@ -586,8 +602,9 @@ async function manejarAPI(req, res, ruta) {
       const empresa = buscar('empresas', pub.empresaId);
       try {
         // Con foto real del producto, la IA la mejora; sin foto, crea una imagen desde cero
-        if (!pub.imagenIA) pub.imagenOriginal = pub.imagenUrl || '';
+        if (!pub.imagenIA && !pub.diseno) pub.imagenOriginal = pub.imagenUrl || '';
         if (pub.imagenOriginal) {
+          pub.diseno = null;
           pub.imagenUrl = await imagen.fotoPro(absolutizar(pub.imagenOriginal, baseDeReq(req)), pub.imagenPrompt || body.imagenPrompt, pub.id + '-' + Date.now().toString(36));
           pub.imagenIA = true;
           pub.imagenError = null;

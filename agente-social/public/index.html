@@ -344,6 +344,19 @@ function tarjetaPublicacion(p) {
     catch(e){ toast(e.message); bLink.disabled=false; bLink.textContent='🔗 Traer de un enlace'; }
   };
   if (!p.video) acc.appendChild(bLink);
+  if (!p.video && p.imagenUrl) {
+    const bDis = el('<button class="btn sec mini">🖼️ '+(p.diseno?'Cambiar diseño':'Diseño pro')+'</button>');
+    bDis.onclick = async () => {
+      const d = p.diseno || { marca: nombreEmpresa(p.empresaId).replace(/m[eé]xico/i,'').trim(), web: 'celmaxxgtide.com' };
+      const campos = [['marca','Marca (arriba, chiquito)'],['titulo','Nombre del producto'],['detalle','Datos clave, ej. 40W · RGB · 3 horas'],['precio','Precio, ej. $759 (vacío = "Pregunta en sucursal")'],['antes','Precio de antes (vacío si no hay)'],['web','Línea de abajo (web o sucursales)']];
+      const datos = {};
+      for (const [k, t] of campos) { const v = prompt(t, d[k] || ''); if (v === null) return; datos[k] = v; }
+      bDis.disabled = true; bDis.textContent = '🖼️ Diseñando…';
+      try { await guardarTexto(); await api('/api/publicaciones/'+p.id+'/diseno', {method:'POST', body: JSON.stringify(datos)}); toast('Diseño listo ✅'); cargar(); }
+      catch (e) { toast(e.message); bDis.disabled = false; bDis.textContent = '🖼️ Diseño pro'; }
+    };
+    acc.appendChild(bDis);
+  }
 
   if (S.imagenActiva && !p.video) {
     const bImg = el('<button class="btn sec mini">🎨 '+(p.imagenOriginal||(p.imagenUrl&&!p.imagenIA)?(p.imagenIA?'Otra foto pro':'Foto pro con IA'):(p.imagenUrl?'Regenerar imagen IA':'Generar imagen IA'))+'</button>');
