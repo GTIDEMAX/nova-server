@@ -28,7 +28,9 @@ async function tick() {
 async function vuelta() {
   ultimaEjecucion = new Date().toISOString();
   const ahora = Date.now();
-  const vencidas = estado.publicaciones.filter(
+  // Autopiloto en pausa (desde el panel): nada se publica solo hasta que lo vuelvan a encender
+  const pausado = !!(estado.control && estado.control.autopilotoPausado);
+  const vencidas = pausado ? [] : estado.publicaciones.filter(
     (p) => p.estado === 'programado' && p.fechaProgramada && new Date(p.fechaProgramada).getTime() <= ahora
   );
 
@@ -87,6 +89,7 @@ function iniciar() {
 function estadoScheduler() {
   return {
     activo: !!timer,
+    pausado: !!(estado.control && estado.control.autopilotoPausado),
     intervaloMs: INTERVALO,
     ultimaEjecucion,
     programadas: estado.publicaciones.filter((p) => p.estado === 'programado').length,

@@ -221,6 +221,14 @@ async function manejarAPI(req, res, ruta) {
   if (recurso === 'programador' && partes[2] === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, scheduler.estadoScheduler());
   }
+  // Autopiloto: pausar o reanudar las publicaciones automaticas
+  if (recurso === 'programador' && !partes[2] && req.method === 'PATCH') {
+    if (typeof body.pausado !== 'boolean') return enviarJSON(res, 400, { error: 'Falta pausado (true o false)' });
+    if (!estado.control) estado.control = {};
+    estado.control.autopilotoPausado = body.pausado;
+    guardar();
+    return enviarJSON(res, 200, scheduler.estadoScheduler());
+  }
 
   // ----- Clientes (ventas) y recordatorios de bateria -----
   if (recurso === 'clientes') {
@@ -543,6 +551,8 @@ async function manejarAPI(req, res, ruta) {
       if (typeof body.imagenUrl === 'string' && body.imagenUrl !== pub.imagenUrl) { pub.imagenUrl = body.imagenUrl; pub.imagenIA = false; pub.diseno = null; }
       if (Array.isArray(body.hashtags)) pub.hashtags = body.hashtags.filter((h) => typeof h === 'string' && h.trim()).map((h) => h.trim()).slice(0, 30);
       if (body.accion === 'aprobar') pub.estado = 'aprobado';
+      if (body.accion === 'descartar') { if (pub.estado === 'publicado') return enviarJSON(res, 409, { error: 'Ya se publicó' }); pub.estado = 'descartado'; }
+      if (body.accion === 'recuperar' && pub.estado === 'descartado') pub.estado = 'borrador';
       if (body.accion === 'programar') {
         pub.estado = 'programado';
         pub.fechaProgramada = body.fecha || null;
