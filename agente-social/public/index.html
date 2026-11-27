@@ -242,6 +242,7 @@ function renderEmpresas() {
 
 // ---------- CREAR CONTENIDO ----------
 const formContenido = {}; // lo elegido sobrevive a la recarga automatica
+const formVideo = { archivo: null, empresas: null, redes: ['instagram', 'facebook'], texto: '', subiendo: false }; // igual para el video
 function renderContenido() {
   const c = $('#tab-contenido'); c.innerHTML = '';
   if (!S.empresas.length) { c.appendChild(el('<div class="empty">Primero registra una empresa en la pestaña Empresas.</div>')); return; }
@@ -391,39 +392,49 @@ async function renderAprobaciones() {
       (s.fallidas?` · ${s.fallidas} fallida(s)`:'') +
       '. Las publicaciones aprobadas y programadas se publican solas a su hora.';
   }).catch(()=>{});
-  // ---- Nuevo video (Reel de Instagram + video de Facebook) ----
+  // ---- Nuevo video (Reel de Instagram + video de Facebook), a una o varias páginas ----
   if (S.empresas.length) {
+    const F = formVideo;
+    if (!F.empresas) F.empresas = [S.empresas[0].id];
+    F.empresas = F.empresas.filter(id => S.empresas.some(e => e.id === id));
     const vCard = el(`<div class="card">
       <h3>🎬 Nuevo video</h3>
-      <div class="muted">Sube el video una vez y elige dónde sale. Queda como borrador para que lo apruebes y lo publiques (o lo programes).</div>
+      <div class="muted">Sube el video una vez y elige en qué páginas y redes sale. Queda como borrador para que lo apruebes y lo publiques (o lo programes).</div>
       <div class="row">
-        <div><label>Empresa</label><select class="v-emp">${S.empresas.map(e=>`<option value="${e.id}">${esc(e.nombre)}</option>`).join('')}</select></div>
+        <div><label>Páginas</label>${S.empresas.map(e=>`<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="v-emp" value="${e.id}" ${F.empresas.includes(e.id)?'checked':''} style="width:auto"> ${esc(e.nombre)}</label>`).join('')}</div>
         <div><label>Redes</label>
-          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="v-red" value="instagram" checked style="width:auto"> Instagram (Reel)</label>
-          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="v-red" value="facebook" checked style="width:auto"> Facebook</label>
+          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="v-red" value="instagram" ${F.redes.includes('instagram')?'checked':''} style="width:auto"> Instagram (Reel)</label>
+          <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="v-red" value="facebook" ${F.redes.includes('facebook')?'checked':''} style="width:auto"> Facebook</label>
         </div>
       </div>
       <label>Texto (con hashtags)</label>
-      <textarea class="v-texto" placeholder="Pega aquí el texto del video…"></textarea>
+      <textarea class="v-texto" placeholder="Pega aquí el texto del video…">${esc(F.texto)}</textarea>
       <input type="file" class="v-file" accept="video/mp4,video/quicktime" style="display:none">
-      <button class="btn sec v-elegir">📁 Elegir video</button> <span class="muted v-info"></span>
-      <div><button class="btn v-go">⬆️ Subir y crear borradores</button></div>
+      <button class="btn sec v-elegir">📁 Elegir video</button> <span class="muted v-info">${F.archivo ? esc(F.archivo.name)+' · '+(F.archivo.size/1048576).toFixed(1)+' MB' : ''}</span>
+      <div><button class="btn v-go" ${F.subiendo?'disabled':''}>${F.subiendo?'⬆️ Subiendo video…':'⬆️ Subir y crear borradores'}</button></div>
     </div>`);
-    let archivo = null;
+    vCard.querySelectorAll('.v-emp').forEach(x => x.onchange = () => { F.empresas = [...vCard.querySelectorAll('.v-emp:checked')].map(y=>y.value); });
+    vCard.querySelectorAll('.v-red').forEach(x => x.onchange = () => { F.redes = [...vCard.querySelectorAll('.v-red:checked')].map(y=>y.value); });
+    $('.v-texto', vCard).oninput = (e) => { F.texto = e.target.value; };
     $('.v-elegir', vCard).onclick = () => $('.v-file', vCard).click();
-    $('.v-file', vCard).onchange = () => { archivo = $('.v-file', vCard).files[0] || null; $('.v-info', vCard).textContent = archivo ? `${archivo.name} · ${(archivo.size/1048576).toFixed(1)} MB` : ''; };
+    $('.v-file', vCard).onchange = () => { F.archivo = $('.v-file', vCard).files[0] || null; $('.v-info', vCard).textContent = F.archivo ? `${F.archivo.name} · ${(F.archivo.size/1048576).toFixed(1)} MB` : ''; };
     $('.v-go', vCard).onclick = async () => {
-      const redes = [...vCard.querySelectorAll('.v-red:checked')].map(x=>x.value);
-      if (!archivo) return toast('Elige el video');
-      if (archivo.size > 100*1024*1024) return toast('El video pesa más de 100 MB');
-      if (!redes.length) return toast('Elige al menos una red');
-      const b = $('.v-go', vCard); b.disabled = true; b.textContent = '⬆️ Subiendo video…';
+      if (!F.archivo) return toast('Elige el video');
+      if (F.archivo.size > 100*1024*1024) return toast('El video pesa más de 100 MB');
+      if (!F.empresas.length) return toast('Elige al menos una página');
+      if (!F.redes.length) return toast('Elige al menos una red');
+      const b = $('.v-go', vCard); b.disabled = true; b.textContent = '⬆️ Subiendo video…'; F.subiendo = true;
       try {
-        const r = await fetch('/api/videos', { method:'POST', headers:{'Content-Type': archivo.type || 'video/mp4', 'X-Nombre': encodeURIComponent(archivo.name)}, body: archivo });
+        const r = await fetch('/api/videos', { method:'POST', headers:{'Content-Type': F.archivo.type || 'video/mp4', 'X-Nombre': encodeURIComponent(F.archivo.name)}, body: F.archivo });
         const d = await r.json().catch(()=>({})); if (!r.ok) throw new Error(d.error || 'No se pudo subir');
-        await api('/api/publicaciones', { method:'POST', body: JSON.stringify({ empresaId: $('.v-emp',vCard).value, plataformas: redes, texto: $('.v-texto',vCard).value, video: d.video }) });
-        toast('Video listo ✅ Apruébalo abajo'); cargar();
-      } catch(e) { toast('Error: '+e.message); b.disabled = false; b.textContent = '⬆️ Subir y crear borradores'; }
+        let n = 0;
+        for (const empresaId of F.empresas) {
+          const x = await api('/api/publicaciones', { method:'POST', body: JSON.stringify({ empresaId, plataformas: F.redes, texto: F.texto, video: d.video }) });
+          n += x.publicaciones.length;
+        }
+        F.archivo = null; F.texto = ''; F.subiendo = false;
+        toast(`Video listo ✅ ${n} borrador(es): apruébalos abajo`); cargar();
+      } catch(e) { F.subiendo = false; toast('Error: '+e.message); cargar(); }
     };
     c.appendChild(vCard);
   }
@@ -964,6 +975,7 @@ cargar();
 setInterval(() => {
   const a = document.activeElement;
   if (a && ['INPUT','TEXTAREA','SELECT'].includes(a.tagName)) return;
+  if (formVideo.subiendo || formVideo.archivo) return; // no perder el video elegido ni cortar la subida
   // Recargar redibuja todo: no borrar lo que se escribio y aun no se guarda
   if ([...document.querySelectorAll('section:not([hidden]) textarea, section:not([hidden]) input:not([type=file])')].some(x => x.value !== x.defaultValue && !x.id.startsWith('g-'))) return;
   cargar();
