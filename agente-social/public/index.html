@@ -997,7 +997,7 @@ function renderEmpresas() {
       zona.appendChild(sel); zona.appendChild(ok);
     };
     $('.b-veto', item).onclick = async () => {
-      const v = prompt('Marcas o palabras que NUNCA deben salir en la página de ' + e.nombre + ' (sepáralas con comas).\nEj. para G-TiDE: heysong', e.noMencionar || '');
+      const v = prompt('Marcas o palabras que NUNCA deben salir en la página de ' + e.nombre + ' (sepáralas con comas).\nEj. para G-TiDE: heysong\nPara permitir algo, ponle + delante. Ej.: celmaxx, +celmaxxgtide.com', e.noMencionar || '');
       if (v === null) return;
       try { await api('/api/empresas/'+e.id, { method:'PATCH', body: JSON.stringify({ noMencionar: v }) }); toast(v.trim() ? 'Guardado: se bloqueará ' + v.trim() : 'Sin marcas bloqueadas'); cargar(); }
       catch (err) { toast('⚠️ No se guardó: ' + err.message); }
@@ -1062,8 +1062,11 @@ function renderContenido() {
 // A qué página/cuenta real sale cada publicación (para verificar antes de aprobar)
 const normalMarca = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function marcaVetada(p, e) {
-  const lista = String(e.noMencionar || '').split(/[,;\n]/).map(x => x.trim()).filter(Boolean);
-  const todo = normalMarca([p.texto, (p.hashtags || []).join(' '), p.video && p.video.nombre].join(' '));
+  const todas = String(e.noMencionar || '').split(/[,;\n]/).map(x => x.trim()).filter(Boolean);
+  const lista = todas.filter(m => !m.startsWith('+'));
+  let crudo = [p.texto, (p.hashtags || []).join(' '), p.video && p.video.nombre].join(' ');
+  for (const m of todas.filter(m => m.startsWith('+')).map(m => m.slice(1).trim()).filter(Boolean)) crudo = crudo.replace(new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
+  const todo = normalMarca(crudo);
   return lista.find(m => normalMarca(m).length >= 3 && todo.includes(normalMarca(m))) || '';
 }
 function destinoPublicacion(p) {

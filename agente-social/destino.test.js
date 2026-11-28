@@ -55,3 +55,12 @@ test('marcas prohibidas: un texto de heysong nunca sale en G-TiDE', async () => 
   const cel = await adapters.publicar('facebook', { id: 'c1', texto: 'heysong AURA en CEL MAXX', hashtags: [] }, { id: 'c', nombre: 'Celmaxx', metaPageId: 'PAGINA_CEL' });
   assert.equal(cel.ok, true);
 });
+
+test('excepción "+": su propia web celmaxxgtide.com pasa, la palabra Celmaxx sola no', () => {
+  const { marcaVetada } = require('./adapters');
+  const gtide = { noMencionar: 'HEYSONG,CELMAXX,+celmaxxgtide.com,' };
+  assert.equal(marcaVetada({ texto: 'Pídela en https://CelmaxxGtide.com/bocina-sh50/', hashtags: ['#gtide'] }, gtide), '');
+  assert.equal(marcaVetada({ texto: 'Pídela en celmaxxgtide.com o en tiendas Celmaxx', hashtags: [] }, gtide), 'CELMAXX');
+  assert.equal(marcaVetada({ texto: 'Pídela en celmaxxgtide.com', hashtags: ['#CelMaxx'] }, gtide), 'CELMAXX');
+  assert.equal(marcaVetada({ texto: 'heysong en celmaxxgtide.com', hashtags: [] }, gtide), 'HEYSONG');
+});

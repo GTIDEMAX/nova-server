@@ -49,9 +49,14 @@ async function publicar(plataforma, publicacion, empresa) {
 // espacios ni signos: "HEYSONG", "heysōng", "#Hey_Song" y "hey song" cuentan igual.
 const normal = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function marcaVetada(pub, empresa) {
-  const lista = String((empresa && empresa.noMencionar) || '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+  const todas = String((empresa && empresa.noMencionar) || '').split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+  // "+palabra" es una excepción permitida (ej. "+celmaxxgtide.com", su propia web): se quita antes de revisar
+  const permitidas = todas.filter((m) => m.startsWith('+')).map((m) => m.slice(1).trim()).filter(Boolean);
+  const lista = todas.filter((m) => !m.startsWith('+'));
   if (!lista.length) return '';
-  const todo = normal([pub.texto, (pub.hashtags || []).join(' '), pub.video && pub.video.nombre].join(' '));
+  let crudo = [pub.texto, (pub.hashtags || []).join(' '), pub.video && pub.video.nombre].join(' ');
+  for (const p of permitidas) crudo = crudo.replace(new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
+  const todo = normal(crudo);
   return lista.find((m) => normal(m).length >= 3 && todo.includes(normal(m))) || '';
 }
 
