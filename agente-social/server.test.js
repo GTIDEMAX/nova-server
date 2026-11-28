@@ -299,3 +299,162 @@ test('una publicación se puede cambiar de empresa mientras no haya salido', asy
   const mal = await fetch(base + '/api/publicaciones/' + p.id, { method: 'PATCH', headers: { ...auth(CLAVE), 'content-type': 'application/json' }, body: JSON.stringify({ empresaId: 'no-existe' }) });
   assert.equal(mal.status, 400);
 });
+
+// ---------- Tienda (catálogo público de VTL) ----------
+const JPG = Buffer.from('/9j/4AAQSkZJRgABAgAAAQABAAD/2wBDAAg+Pkk+SVVVVVVVVWRdZGhoaGRkZGRoaGhwcHCDg4NwcHBoaHBwfHyDg4+Tj4eHg4eTk5ubm7q6srLZ2eD/////xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAAIAAgDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAFF/f//Z', 'base64');
+const pinVTL = async () => (await api('/api/tiendas')).find((t) => t.slug === 'vtl').pin;
+const dueno = (ruta, { method = 'GET', pin, body, ct, ip } = {}) => fetch(base + '/api/tienda/vtl' + ruta, {
+  method, body,
+  headers: { ...(pin !== undefined ? { 'x-tienda-pin': pin } : {}), ...(ct ? { 'content-type': ct } : {}), ...(ip ? { 'x-forwarded-for': ip } : {}) },
+});
+const subirProducto = (pin, nombre, cat, cuerpo = JPG, ct = 'image/jpeg') =>
+  dueno(`/productos?nombre=${encodeURIComponent(nombre)}&cat=${cat}`, { method: 'POST', pin, body: cuerpo, ct });
+
+test('tienda: el catálogo abre sin contraseña, trae las semillas y nunca muestra el PIN', async () => {
+  for (const url of [base, sinClave]) {
+    const r = await fetch(url + '/api/tienda/vtl');
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('cache-control'), 'no-store');
+    const txt = await r.text();
+    assert.ok(!/"pin"|empresaId/.test(txt), 'no debe exponer pin ni empresaId');
+    const { tienda: t, productos } = JSON.parse(txt);
+    assert.deepEqual(Object.keys(t).sort(), ['completo', 'direccion', 'mapsQuery', 'nombre', 'saludo', 'slug', 'whatsapp']);
+    assert.equal(t.nombre, 'VTL');
+    assert.equal(t.whatsapp, '525539986380');
+    assert.equal(productos.length, 30);
+    assert.deepEqual(productos.map((p) => p.orden), [...productos.map((p) => p.orden)].sort((a, b) => a - b));
+    assert.ok(productos.every((p) => p.nuevo === false && /^\/tienda-foto\/tf-/.test(p.foto) && !('activo' in p)));
+    const foto = await fetch(url + productos[0].foto);
+    assert.equal(foto.status, 200);
+    assert.equal(foto.headers.get('content-type'), 'image/jpeg');
+    assert.equal(foto.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    assert.ok(Buffer.from(await foto.arrayBuffer()).equals(fs.readFileSync(path.join(__dirname, 'tiendas/vtl/img/tablet-01.jpg'))));
+  }
+  assert.equal((await fetch(base + '/api/tienda/nada')).status, 404);
+  assert.equal((await fetch(base + '/tienda/nada')).status, 404);
+  assert.equal((await fetch(base + '/tienda-foto/tf-nada')).status, 404);
+  // la página: la sirve igual en modo público y en modo dueño
+  if (fs.existsSync(path.join(__dirname, 'public/tienda.html'))) {
+    for (const r of ['/tienda/vtl', '/tienda/vtl/admin']) {
+      const p = await fetch(base + r);
+      assert.equal(p.status, 200, r);
+      assert.equal(p.headers.get('content-type'), 'text/html; charset=utf-8');
+    }
+  }
+  // la ruta de fotos no sirve otros archivos guardados (videos, etc.)
+  const v = await (await fetch(base + '/api/videos', { method: 'POST', headers: { ...auth(CLAVE), 'content-type': 'video/mp4' }, body: crypto.randomBytes(5000) })).json();
+  assert.equal((await fetch(base + '/tienda-foto/' + v.video.archivo)).status, 404);
+  assert.equal((await fetch(base + '/tienda.html')).status, 401, 'el archivo suelto sigue detrás del panel');
+});
+
+test('tienda: /api/tiendas es solo para el panel', async () => {
+  assert.equal((await fetch(base + '/api/tiendas')).status, 401);
+  assert.equal((await fetch(sinClave + '/api/tiendas')).status, 503);
+  const [t] = await api('/api/tiendas');
+  assert.deepEqual(t, { slug: 'vtl', nombre: 'VTL', completo: 'Ventas de Todo Leal', pin: t.pin, empresaId: null, whatsapp: '525539986380',
+    direccion: 'Plaza Uruguay 17, piso 2, local 215, Centro, CDMX', productos: 30, url: '/tienda/vtl', admin: '/tienda/vtl/admin' });
+  assert.match(t.pin, /^\d{6}$/);
+  const patch = (body, ct = 'application/json') => fetch(base + '/api/tiendas/vtl', { method: 'PATCH', headers: { ...auth(CLAVE), 'content-type': ct }, body: JSON.stringify(body) });
+  assert.equal((await patch({ pin: '12a4' })).status, 400);
+  assert.equal((await patch({ pin: '123' })).status, 400);
+  assert.equal((await patch({ empresaId: 'no-existe' })).status, 400);
+  assert.equal((await patch({ pin: '4321' }, 'text/plain')).status, 415);
+  assert.equal((await patch({ pin: '4321' })).status, 200);
+  assert.equal(await pinVTL(), '4321');
+  assert.equal((await patch({ pin: t.pin })).status, 200);
+});
+
+test('tienda: el dueño entra con su PIN y sube, edita y borra productos', async () => {
+  const pin = await pinVTL();
+  assert.equal((await dueno('/entrar', { method: 'POST', pin: '000000' === pin ? '111111' : '000000' })).status, 401);
+  assert.equal((await dueno('/entrar', { method: 'POST' })).status, 401);
+  const entrar = await dueno('/entrar', { method: 'POST', pin });
+  assert.equal(entrar.status, 200);
+  assert.deepEqual(await entrar.json(), { ok: true });
+  assert.equal((await dueno('/todo')).status, 401);
+
+  assert.equal((await subirProducto('mal', 'Tablet X', 'tablets')).status, 401);
+  assert.equal((await subirProducto(pin, 'Tablet X', 'celulares')).status, 400);
+  assert.equal((await subirProducto(pin, '   ', 'tablets')).status, 400);
+  assert.equal((await subirProducto(pin, 'Tablet X', 'tablets', JPG, 'text/plain')).status, 415);
+  assert.equal((await subirProducto(pin, 'Tablet X', 'tablets', Buffer.from('<html>no soy foto</html>'))).status, 400);
+  const grande = await subirProducto(pin, 'Tablet X', 'tablets', Buffer.alloc(6 * 1024 * 1024 + 1, 0xff)).catch((e) => e);
+  if (!(grande instanceof Error)) assert.equal(grande.status, 413); // a veces el servidor corta la conexión antes de que fetch lea el 413
+
+  const r = await subirProducto(pin, '  Tablet Umiio X20 Ultra  ' + 'x'.repeat(100), 'tablets');
+  assert.equal(r.status, 201);
+  const p = await r.json();
+  assert.deepEqual(Object.keys(p).sort(), ['activo', 'cat', 'foto', 'id', 'nombre', 'nuevo', 'orden']);
+  assert.equal(p.nombre.length, 80);
+  assert.ok(p.nombre.startsWith('Tablet Umiio X20 Ultra'));
+  assert.equal(p.nuevo, true);
+  const publico = async () => (await (await fetch(base + '/api/tienda/vtl')).json()).productos;
+  assert.equal((await publico())[0].id, p.id, 'el nuevo sale primero');
+  const foto = await fetch(base + p.foto);
+  assert.equal(foto.headers.get('content-type'), 'image/jpeg');
+  assert.ok(Buffer.from(await foto.arrayBuffer()).equals(JPG));
+
+  const patch = (body) => dueno('/productos/' + p.id, { method: 'PATCH', pin, body: JSON.stringify(body), ct: 'application/json' });
+  assert.equal((await patch({ cat: 'otra' })).status, 400);
+  assert.equal((await patch({ nombre: '' })).status, 400);
+  assert.equal((await dueno('/productos/' + p.id, { method: 'PATCH', pin: 'mal', body: '{}' })).status, 401);
+  const editado = await (await patch({ nombre: 'Tablet X20', cat: 'infantiles', activo: false, orden: 99 })).json();
+  assert.deepEqual([editado.nombre, editado.cat, editado.activo, editado.orden], ['Tablet X20', 'infantiles', false, 99]);
+  assert.ok(!(await publico()).some((x) => x.id === p.id), 'oculto no sale al público');
+  const todo = await (await dueno('/todo', { pin })).json();
+  assert.equal(todo.productos.find((x) => x.id === p.id).activo, false);
+  assert.ok(todo.productos.every((x) => typeof x.activo === 'boolean'));
+  assert.ok(!JSON.stringify(todo).includes(pin));
+
+  assert.equal((await dueno('/productos/' + p.id, { method: 'DELETE', pin: 'mal' })).status, 401);
+  const borrar = await dueno('/productos/' + p.id, { method: 'DELETE', pin });
+  assert.deepEqual(await borrar.json(), { ok: true });
+  assert.equal((await fetch(base + p.foto)).status, 404);
+  assert.equal((await dueno('/productos/' + p.id, { method: 'DELETE', pin })).status, 404);
+});
+
+test('tienda: un producto nuevo deja borradores para aprobar en la marca ligada (nunca se publica solo)', async () => {
+  const pin = await pinVTL();
+  const pubsDe = async (productoId) => (await api('/api/estado')).publicaciones.filter((x) => x.productoId === productoId);
+  assert.ok(!(await api('/api/estado')).publicaciones.some((x) => x.origen === 'tienda'), 'las semillas no generan publicaciones');
+
+  // sin empresa ligada: no se crea nada
+  const sin = await (await subirProducto(pin, 'Tira LED 5 m', 'luces')).json();
+  assert.equal((await pubsDe(sin.id)).length, 0);
+
+  const e = await api('/api/empresas', 'POST', { nombre: 'VTL Mayoreo', plataformas: ['instagram', 'facebook'] });
+  await api('/api/tiendas/vtl', 'PATCH', { empresaId: e.id });
+  const p = await (await subirProducto(pin, 'Carrito control remoto', 'juguetes')).json();
+  await new Promise((ok) => setTimeout(ok, 500)); // varias vueltas del programador
+  const pubs = await pubsDe(p.id);
+  assert.deepEqual(pubs.map((x) => x.plataforma).sort(), ['facebook', 'instagram']);
+  for (const x of pubs) {
+    assert.equal(x.estado, 'borrador');
+    assert.equal(x.empresaId, e.id);
+    assert.equal(x.imagenUrl, p.foto);
+    assert.equal(x.texto, 'Nuevo en VTL: Carrito control remoto. Solo por caja cerrada en Plaza Uruguay 17, Centro, CDMX. Pedidos por WhatsApp 55 3998 6380.');
+  }
+  const t2 = await (await subirProducto(pin, 'Tablet A18', 'tablets')).json();
+  assert.match((await pubsDe(t2.id))[0].texto, /VTL: Tablet A18\. Mayoreo y por caja en/);
+  const g = await (await subirProducto(pin, 'Reloj R8', 'gtide')).json();
+  assert.match((await pubsDe(g.id))[0].texto, /Pregunta por tu modelo/);
+
+  // si el dueño borra el producto, sus borradores ya no salen
+  await dueno('/productos/' + p.id, { method: 'DELETE', pin });
+  assert.ok((await pubsDe(p.id)).every((x) => x.estado === 'descartado'));
+
+  await api('/api/tiendas/vtl', 'PATCH', { empresaId: null });
+  const otro = await (await subirProducto(pin, 'Arcade 2 jugadores', 'arcade')).json();
+  assert.equal((await pubsDe(otro.id)).length, 0);
+});
+
+test('tienda: demasiados PIN equivocados desde una IP responden 429', async () => {
+  const pin = await pinVTL();
+  const ip = '203.0.113.' + Math.floor(Math.random() * 250);
+  for (let i = 0; i < 8; i++) assert.equal((await dueno('/entrar', { method: 'POST', pin: 'x' + i, ip })).status, 401, 'intento ' + i);
+  assert.equal((await dueno('/entrar', { method: 'POST', pin: 'x', ip })).status, 429);
+  assert.equal((await dueno('/entrar', { method: 'POST', pin, ip })).status, 429, 'ni con el PIN correcto mientras dure el bloqueo');
+  assert.equal((await dueno('/productos?nombre=a&cat=arcade', { method: 'POST', pin, ip, body: JPG, ct: 'image/jpeg' })).status, 429);
+  assert.equal((await dueno('/entrar', { method: 'POST', pin, ip: '198.51.100.7' })).status, 200, 'otra IP sigue entrando');
+  assert.equal((await fetch(base + '/api/tienda/vtl', { headers: { 'x-forwarded-for': ip } })).status, 200, 'el catálogo público no se bloquea');
+});

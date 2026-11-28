@@ -11,7 +11,7 @@ const path = require('path');
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 const MONGODB_URI = process.env.MONGODB_URI;
 
-const ESTADO_INICIAL = { empresas: [], publicaciones: [], mensajes: [], clientes: [], spots: [], control: {} };
+const ESTADO_INICIAL = { empresas: [], publicaciones: [], mensajes: [], clientes: [], spots: [], tiendas: [], control: {} };
 
 // IMPORTANTE: 'estado' se comparte por referencia con server.js/scheduler.js,
 // asi que SIEMPRE mutamos sus propiedades, nunca reasignamos el objeto.
@@ -29,10 +29,11 @@ function aplicar(doc) {
   estado.clientes = doc.clientes || [];
   estado.control = doc.control || {};
   estado.spots = doc.spots || [];
+  estado.tiendas = doc.tiendas || [];
 }
 
 function snapshot() {
-  return { empresas: estado.empresas, publicaciones: estado.publicaciones, mensajes: estado.mensajes, clientes: estado.clientes, spots: estado.spots, control: estado.control };
+  return { empresas: estado.empresas, publicaciones: estado.publicaciones, mensajes: estado.mensajes, clientes: estado.clientes, spots: estado.spots, tiendas: estado.tiendas, control: estado.control };
 }
 
 // Inicializa el almacenamiento. Debe llamarse (await) antes de arrancar el server.

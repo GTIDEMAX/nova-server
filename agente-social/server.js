@@ -17,6 +17,7 @@ const feed = require('./feed');
 const imagen = require('./imagen');
 const recordatorios = require('./recordatorios');
 const spots = require('./spots');
+const tienda = require('./tienda');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -72,9 +73,10 @@ const igual = (a, b) => crypto.timingSafeEqual(hash(a), hash(b));
 
 // Rutas que deben abrir sin contrasena: Meta descarga las fotos, las webs leen feed/widget,
 // el webhook se valida con firma y el bot con su propio token.
+// La tienda la abre cualquiera; las acciones del dueno se validan con su PIN (header X-Tienda-Pin).
 function esPublica(ruta) {
   if (ruta.includes('..')) return false;
-  return ruta === '/webhook/whatsapp' || /^\/(feed|widget|uploads|generated)\//.test(ruta) || /^\/api\/bot\//.test(ruta);
+  return ruta === '/webhook/whatsapp' || /^\/(feed|widget|uploads|generated|tienda|tienda-foto)\//.test(ruta) || /^\/api\/(bot|tienda)\//.test(ruta);
 }
 
 // Devuelve true si puede pasar; si no, ya respondio. Sin PANEL_PASSWORD el panel queda cerrado.
@@ -196,6 +198,9 @@ async function manejarAPI(req, res, ruta) {
     guardar();
     return enviarJSON(res, 201, { publicaciones: creadas });
   }
+
+  // ----- Tiendas (catalogos publicos): links, PIN del dueno y empresa donde se anuncian -----
+  if (recurso === 'tiendas') return tienda.manejarPanel(req, res, partes, body);
 
   // Estado general (todo lo que necesita el panel)
   if (recurso === 'estado' && req.method === 'GET') {
@@ -905,6 +910,18 @@ function manejarWidget(req, res, ruta) {
 async function atender(req, res) {
   const ruta = req.url.split('?')[0];
   if (!esPublica(ruta) && !autorizar(req, res)) return;
+  // La tienda lee el cuerpo a su manera (la foto llega tal cual, no en JSON)
+  if (ruta.startsWith('/api/tienda/')) {
+    try {
+      await tienda.manejarAPI(req, res, ruta);
+    } catch (e) {
+      console.error('[tienda]', e.message);
+      if (!res.headersSent) enviarJSON(res, 500, { error: 'Error interno' });
+    }
+    return;
+  }
+  if (ruta.startsWith('/tienda/')) return tienda.servirPagina(req, res, ruta);
+  if (ruta.startsWith('/tienda-foto/')) return tienda.servirFoto(req, res, ruta);
   if (ruta.startsWith('/api/')) {
     try {
       await manejarAPI(req, res, ruta);
@@ -928,7 +945,9 @@ const server = http.createServer((req, res) => {
   });
 });
 
-store.iniciar().then(() => {
+store.iniciar().then(async () => {
+  // Crea la tienda de VTL (y sus productos) si aun no existe; si falla, el panel arranca igual
+  await tienda.sembrar().catch((e) => console.error('[tienda] no se pudo crear la tienda:', e.message));
   // Un spot que se estaba produciendo cuando el servidor se reinicio ya no va a terminar
   for (const sp of estado.spots || []) {
     if (sp.estado === 'produciendo') { sp.estado = 'error'; sp.error = 'Se reinició el servidor a media producción. Dale "Producir" otra vez.'; }

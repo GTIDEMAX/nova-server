@@ -333,6 +333,7 @@ small.hs { color: var(--teal); }
       <button class="lrow" data-ir="web"><div class="ri" style="background:var(--teal)">🌐</div><div class="rt"><b>Mi web</b><span>Feed y widget para tu página</span></div><span class="chev">›</span></button>
       <button class="lrow" data-ir="reportes"><div class="ri" style="background:var(--blue)">📊</div><div class="rt"><b>Reportes</b><span>Cómo van tus publicaciones</span></div><span class="chev">›</span></button>
     </div>
+    <div id="tiendasMas"></div>
   </section>
   <section id="tab-empresas" hidden></section>
   <section id="tab-contenido" hidden></section>
@@ -790,6 +791,40 @@ function agendaMuro(c) {
 function renderMas() {
   $('#empBadge').textContent = `${S.empresas.length} marca${S.empresas.length === 1 ? '' : 's'} · ${S.empresas.filter((e) => e.metaPageId).length} conectada${S.empresas.filter((e) => e.metaPageId).length === 1 ? '' : 's'}`;
   api('/api/meta/estado').then((m) => { const n = $('#metaMas'); if (n) n.textContent = m.ok ? 'Conectado · ' + m.detalle.replace(/^Conectado ✅ ·\s*/, '') : (m.detalle || 'Sin conectar'); }).catch(() => {});
+  api('/api/tiendas').then(pintarTiendas).catch(() => {});
+}
+// Tiendas: catálogo público del cliente, su liga de dueño con PIN y la marca donde se anuncian sus productos nuevos
+function pintarTiendas(tiendas) {
+  const c = $('#tiendasMas'); if (!c) return;
+  c.innerHTML = tiendas.length ? '<div class="sec-h"><h2>Tiendas</h2></div>' : '';
+  tiendas.forEach((t) => {
+    const liga = (ruta) => `<div class="flex-b"><a class="muted" href="${esc(ruta)}" target="_blank" rel="noopener" style="word-break:break-all">${esc(location.origin + ruta)}</a><button class="btn sec mini" data-copiar="${esc(ruta)}">Copiar</button></div>`;
+    const card = el(`<div class="card">
+      <div class="top flex-b"><h3>${esc(t.nombre)}${t.completo ? ' · ' + esc(t.completo) : ''}</h3><span class="tag">${t.productos} producto${t.productos === 1 ? '' : 's'}</span></div>
+      <label>Liga pública</label>${liga(t.url)}
+      <label>Liga del dueño (entra con el PIN)</label>${liga(t.admin)}
+      <label>PIN del dueño</label><div class="flex-b"><b style="font-size:17px;letter-spacing:2px">${esc(t.pin)}</b><button class="btn sec mini b-pin">Cambiar PIN</button></div>
+      <label>Anunciar productos nuevos en</label>
+      <select class="t-emp"><option value="">— No anunciar —</option>${S.empresas.map((e) => `<option value="${e.id}" ${e.id === t.empresaId ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select>
+    </div>`);
+    card.querySelectorAll('[data-copiar]').forEach((b) => (b.onclick = () => {
+      const txt = location.origin + b.dataset.copiar;
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Liga copiada'), () => prompt('Copia la liga:', txt));
+      else prompt('Copia la liga:', txt);
+    }));
+    $('.b-pin', card).onclick = async () => {
+      const v = prompt('Nuevo PIN para ' + t.nombre + ' (de 4 a 8 números):', t.pin);
+      if (v === null) return;
+      try { await api('/api/tiendas/' + t.slug, { method: 'PATCH', body: JSON.stringify({ pin: v.trim() }) }); toast('PIN cambiado'); renderMas(); }
+      catch (err) { toast('⚠️ No se guardó: ' + err.message); }
+    };
+    $('.t-emp', card).onchange = async (ev) => {
+      const empresaId = ev.target.value || null;
+      try { await api('/api/tiendas/' + t.slug, { method: 'PATCH', body: JSON.stringify({ empresaId }) }); toast(empresaId ? 'Los productos nuevos llegarán a Hoy para aprobar' : 'Ya no se anuncian los productos nuevos'); }
+      catch (err) { toast('⚠️ No se guardó: ' + err.message); renderMas(); }
+    };
+    c.appendChild(card);
+  });
 }
 
 // ---------- CREAR (botón +) ----------

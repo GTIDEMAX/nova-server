@@ -1,0 +1,182 @@
+[
+ {
+  "archivo": "tablet-01.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio i18 Pro Max",
+  "orden": 0
+ },
+ {
+  "archivo": "tablet-04.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio i17 Pro Max",
+  "orden": 1
+ },
+ {
+  "archivo": "tablet-05.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio · varios colores",
+  "orden": 2
+ },
+ {
+  "archivo": "tablet-06.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio S25 Ultra",
+  "orden": 3
+ },
+ {
+  "archivo": "tablet-07.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Asumi i18 Pro Max",
+  "orden": 4
+ },
+ {
+  "archivo": "tablet-08.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Asumi A18",
+  "orden": 5
+ },
+ {
+  "archivo": "tablet-02.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio i18 Pro Max · colores",
+  "orden": 6
+ },
+ {
+  "archivo": "tablet-03.jpg",
+  "cat": "tablets",
+  "nombre": "Tablet Umiio i18 Pro Max · estuches",
+  "orden": 7
+ },
+ {
+  "archivo": "tablet-10.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil K11 Spider-Man",
+  "orden": 8
+ },
+ {
+  "archivo": "tablet-11.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil Asumi K05 conejo",
+  "orden": 9
+ },
+ {
+  "archivo": "tablet-12.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil Asumi gatitos",
+  "orden": 10
+ },
+ {
+  "archivo": "tablet-13.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil Asumi K07 perrito",
+  "orden": 11
+ },
+ {
+  "archivo": "tablet-14.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil Asumi K10 fútbol",
+  "orden": 12
+ },
+ {
+  "archivo": "tablet-09.jpg",
+  "cat": "infantiles",
+  "nombre": "Tablet infantil con funda de rana",
+  "orden": 13
+ },
+ {
+  "archivo": "arcade-01.jpg",
+  "cat": "arcade",
+  "nombre": "Tablero arcade ALA M25",
+  "orden": 14
+ },
+ {
+  "archivo": "arcade-06.jpg",
+  "cat": "arcade",
+  "nombre": "Consola mini arcade M68",
+  "orden": 15
+ },
+ {
+  "archivo": "arcade-07.jpg",
+  "cat": "arcade",
+  "nombre": "Consola GS5 mini",
+  "orden": 16
+ },
+ {
+  "archivo": "arcade-08.jpg",
+  "cat": "arcade",
+  "nombre": "Consola M18 Pro",
+  "orden": 17
+ },
+ {
+  "archivo": "arcade-02.jpg",
+  "cat": "arcade",
+  "nombre": "Tablero arcade · diseño boxeador",
+  "orden": 18
+ },
+ {
+  "archivo": "arcade-03.jpg",
+  "cat": "arcade",
+  "nombre": "Tablero arcade · diseño plataformas",
+  "orden": 19
+ },
+ {
+  "archivo": "arcade-04.jpg",
+  "cat": "arcade",
+  "nombre": "Tablero arcade · diseño anime",
+  "orden": 20
+ },
+ {
+  "archivo": "arcade-05.jpg",
+  "cat": "arcade",
+  "nombre": "Tablero arcade · diseño fuego",
+  "orden": 21
+ },
+ {
+  "archivo": "juguete-01.jpg",
+  "cat": "juguetes",
+  "nombre": "Jeep montable infantil rosa",
+  "orden": 22
+ },
+ {
+  "archivo": "juguete-02.jpg",
+  "cat": "juguetes",
+  "nombre": "Buggy montable infantil rojo",
+  "orden": 23
+ },
+ {
+  "archivo": "juguete-04.jpg",
+  "cat": "juguetes",
+  "nombre": "Moto montable infantil roja",
+  "orden": 24
+ },
+ {
+  "archivo": "juguete-03.jpg",
+  "cat": "juguetes",
+  "nombre": "Moto montable infantil amarilla",
+  "orden": 25
+ },
+ {
+  "archivo": "juguete-05.jpg",
+  "cat": "juguetes",
+  "nombre": "Bicicletas infantiles",
+  "orden": 26
+ },
+ {
+  "archivo": "juguete-06.jpg",
+  "cat": "juguetes",
+  "nombre": "Bicicletas infantiles rosa y lila",
+  "orden": 27
+ },
+ {
+  "archivo": "juguete-07.jpg",
+  "cat": "juguetes",
+  "nombre": "Bicicleta infantil rosa con canastilla",
+  "orden": 28
+ },
+ {
+  "archivo": "juguete-08.jpg",
+  "cat": "juguetes",
+  "nombre": "Scooters infantiles",
+  "orden": 29
+ }
+]
