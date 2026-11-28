@@ -396,4 +396,4 @@ function simulado(plataforma, pub, motivo) {
   };
 }
 
-module.exports = { marcaVetada, publicar, listarPaginasMeta, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };
+module.exports = { GRAPH, tokenDePagina, marcaVetada, publicar, listarPaginasMeta, enviarWhatsApp, enviarPlantillaWhatsApp, verificarMeta, verificarWhatsApp };

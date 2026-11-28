@@ -305,6 +305,7 @@ small.hs { color: var(--teal); }
   <button class="sb-item" data-ir="spots"><i style="background:var(--pink)">🎙️</i>Spots de audio</button>
   <button class="sb-item" data-ir="web"><i style="background:var(--teal)">🌐</i>Mi web</button>
   <button class="sb-item" data-ir="reportes"><i style="background:var(--blue)">📊</i>Reportes</button>
+  <button class="sb-item" data-ir="aprende"><i style="background:var(--yellow,#ffcc00)">💡</i>Qué funciona e ideas</button>
   <div class="sb-pie"><button class="sb-item" data-ir="mas"><i style="background:#8e8e93">⚙︎</i>Estado del sistema</button></div>
 </aside>
 <div id="main">
@@ -332,6 +333,7 @@ small.hs { color: var(--teal); }
       <button class="lrow" data-ir="spots"><div class="ri" style="background:var(--pink)">🎙️</div><div class="rt"><b>Spots de audio</b><span>Anuncios con voces profesionales</span></div><span class="chev">›</span></button>
       <button class="lrow" data-ir="web"><div class="ri" style="background:var(--teal)">🌐</div><div class="rt"><b>Mi web</b><span>Feed y widget para tu página</span></div><span class="chev">›</span></button>
       <button class="lrow" data-ir="reportes"><div class="ri" style="background:var(--blue)">📊</div><div class="rt"><b>Reportes</b><span>Cómo van tus publicaciones</span></div><span class="chev">›</span></button>
+      <button class="lrow" data-ir="aprende"><div class="ri" style="background:var(--yellow,#ffcc00)">💡</div><div class="rt"><b>Qué funciona e ideas</b><span>Resultados reales, fotos reales y Dame ideas</span></div><span class="chev">›</span></button>
     </div>
     <div id="tiendasMas"></div>
   </section>
@@ -341,6 +343,7 @@ small.hs { color: var(--teal); }
   <section id="tab-spots" hidden></section>
   <section id="tab-web" hidden></section>
   <section id="tab-reportes" hidden></section>
+  <section id="tab-aprende" hidden></section>
 </div>
 
 <nav class="tabbar" aria-label="Secciones">
@@ -431,6 +434,7 @@ const VISTAS = {
   spots: { t: 'Spots', tab: 'mas', back: 'mas', k: 'Anuncios de audio' },
   web: { t: 'Mi web', tab: 'mas', back: 'mas', k: 'Feed y widget para tu página' },
   reportes: { t: 'Reportes', tab: 'mas', back: 'mas', k: 'Cómo van tus publicaciones' },
+  aprende: { t: 'Qué funciona', tab: 'mas', back: 'mas', k: 'Resultados reales, fotos reales e ideas' },
 };
 let tab = 'hoy';
 let segAgenda = 'semana';
@@ -440,7 +444,7 @@ function ir(v, opts = {}) {
   if (!VISTAS[v]) v = 'hoy';
   tab = v;
   try { localStorage.setItem('as-vista', v); } catch (e) {}
-  ['hoy', 'agenda', 'aprobaciones', 'atencion', 'mas', 'empresas', 'contenido', 'clientes', 'spots', 'web', 'reportes'].forEach((s) => {
+  ['hoy', 'agenda', 'aprobaciones', 'atencion', 'mas', 'empresas', 'contenido', 'clientes', 'spots', 'web', 'reportes', 'aprende'].forEach((s) => {
     const n = $('#tab-' + s); if (n) n.hidden = !(s === v || (s === 'aprobaciones' && v === 'agenda' && segAgenda === 'lista'));
   });
   const V = VISTAS[v];
@@ -466,6 +470,7 @@ function render() {
   if (tab === 'spots') renderSpots();
   if (tab === 'web') renderWeb();
   if (tab === 'reportes') renderReportes();
+  if (tab === 'aprende') renderAprende();
   actualizarBadges();
 }
 function actualizarBadges() {
@@ -646,7 +651,8 @@ function tarjetaSwipe(p, nivel) {
         ${vet ? `<span class="pill" style="background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red)">🛑 Menciona ${esc(vet)}</span>`
           : `<span class="pill" style="background:color-mix(in srgb,var(--blue) 16%,transparent);color:var(--blue)">✓ Sin marcas prohibidas</span>`}
         ${bloqueo && !vet ? `<span class="pill" style="background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange)">Falta un paso</span>` : ''}
-      </div></div>
+        ${etiquetaOrigen(p)}
+      </div>${p.idea && p.idea.porque ? `<div class="muted" style="margin-top:6px">💡 ${esc(p.idea.porque)}</div>` : ''}</div>
     <div class="stamp si">PUBLICAR</div><div class="stamp no">DESCARTAR</div></article>`);
   if (nivel === 0) arrastrable(card, p, !bloqueo, bloqueo);
   return card;
@@ -1751,6 +1757,130 @@ async function renderReportes() {
   };
   $('#r-emp', head).onchange = pintar;
   pintar();
+}
+
+// ---------- Qué funciona e ideas: resultados reales (Meta), fotos reales y Dame ideas ----------
+function etiquetaOrigen(p) {
+  if (!p.imagenUrl && !p.video) return '';
+  return p.imagenIA
+    ? `<span class="pill" style="background:color-mix(in srgb,var(--orange) 16%,transparent);color:var(--orange)">🎨 Imagen IA</span>`
+    : `<span class="pill" style="background:color-mix(in srgb,var(--green) 16%,transparent);color:var(--green)">📷 Foto real</span>`;
+}
+const AP = { emp: '', res: {}, cargando: false };
+try { AP.emp = localStorage.getItem('as-ap-emp') || ''; } catch (e) {}
+
+// Fotos del celular pesan 4-8 MB: se achican a 1600 px antes de subir
+async function achicarFoto(file) {
+  const img = await createImageBitmap(file);
+  const s = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.88);
+}
+
+function renderAprende() {
+  const c = $('#tab-aprende'); c.innerHTML = '';
+  if (!S.empresas.length) { c.appendChild(el('<div class="card muted">Primero agrega una marca.</div>')); return; }
+  if (!S.empresas.some((e) => e.id === AP.emp)) AP.emp = S.empresas[0].id;
+  const head = el(`<div class="card"><div class="flex-b"><h2>Marca</h2><select id="ap-emp" style="max-width:240px">
+    ${S.empresas.map((e) => `<option value="${e.id}" ${e.id === AP.emp ? 'selected' : ''}>${esc(e.nombre)}</option>`).join('')}</select></div></div>`);
+  c.appendChild(head);
+  $('#ap-emp', head).onchange = (ev) => { AP.emp = ev.target.value; try { localStorage.setItem('as-ap-emp', AP.emp); } catch (e) {} renderAprende(); };
+  const eid = AP.emp;
+
+  // 1) Resultados reales
+  const rc = el(`<div class="card"><div class="flex-b"><h3>📈 Qué está funcionando</h3><button class="btn sec mini" id="ap-act">↻ Actualizar</button></div>
+    <div class="muted" style="margin-top:4px">Números reales de Facebook e Instagram (últimas 25 publicaciones de cada red).</div><div id="ap-res" style="margin-top:10px"></div></div>`);
+  c.appendChild(rc);
+  const pintarRes = (r) => {
+    const box = $('#ap-res', rc); box.innerHTML = '';
+    (r.avisos || []).forEach((a) => box.appendChild(el(`<div class="muted" style="color:var(--orange);margin-bottom:6px">⚠️ ${esc(a)}</div>`)));
+    if (!r.total) { box.appendChild(el('<div class="muted">Todavía no hay publicaciones con datos en esta marca.</div>')); return; }
+    const pct = (x) => r.base === 'tasa' ? (x * 100).toFixed(1) + '%' : String(Math.round(x));
+    box.appendChild(el(`<div style="margin-bottom:8px">${r.conclusiones.map((t) => `<div>💡 ${esc(t)}</div>`).join('')}</div>`));
+    const lista = (titulo, arr) => {
+      if (!arr.length) return;
+      const d = el(`<div style="margin-top:10px"><b>${titulo}</b></div>`);
+      arr.forEach((m) => d.appendChild(el(`<a href="${esc(m.link || '#')}" target="_blank" rel="noopener" style="display:block;padding:8px 0;border-bottom:1px solid var(--sep,#8883);color:inherit;text-decoration:none">
+        <div>${esc(m.texto.slice(0, 90) || '(sin texto)')}</div>
+        <div class="muted" style="font-size:13px">${m.red === 'instagram' ? 'Instagram' : 'Facebook'} · ${esc(m.tipo)} · ${esc(m.franja)} · ${esc(m.origen)}
+        · ❤️ ${m.likes} · 💬 ${m.comentarios}${m.compartidos != null ? ' · ↗️ ' + m.compartidos : ''}${m.guardados != null ? ' · 🔖 ' + m.guardados : ''}${m.alcance != null ? ' · 👀 ' + m.alcance : ''}${m.clics != null ? ' · 👆 ' + m.clics : ''}
+        · <b>${r.base === 'tasa' && m.tasa != null ? pct(m.tasa) + ' interacción' : m.interacciones + ' interacciones'}</b></div></a>`)));
+      box.appendChild(d);
+    };
+    lista('🏆 Las que mejor funcionaron', r.mejores);
+    lista('📉 Las que menos', r.peores);
+    const grupos = (titulo, g) => { const d = el(`<div style="margin-top:12px"><b>${titulo}</b></div>`); barras(d, g.map((x) => [`${x.clave} (${x.n})`, Number(r.base === 'tasa' ? (x.promedio * 100).toFixed(1) : Math.round(x.promedio))])); box.appendChild(d); };
+    grupos('Por formato', r.porTipo); grupos('Por horario', r.porFranja); grupos('Foto real o IA', r.porOrigen);
+    box.appendChild(el(`<div class="muted" style="margin-top:8px;font-size:12px">Medido por ${r.base === 'tasa' ? '% de interacción (interacciones entre alcance)' : 'interacciones (me gusta + comentarios + guardados + compartidos)'} · actualizado ${new Date(r.actualizado).toLocaleString('es-MX')}</div>`));
+  };
+  const traer = async (forzar) => {
+    $('#ap-res', rc).innerHTML = '<div class="muted">Leyendo resultados de Meta…</div>';
+    try { AP.res[eid] = await api('/api/resultados/' + eid + (forzar ? '?forzar=1' : '')); if (AP.emp === eid) pintarRes(AP.res[eid]); }
+    catch (e) { $('#ap-res', rc).innerHTML = ''; $('#ap-res', rc).appendChild(el(`<div class="muted" style="color:var(--red)">No se pudieron leer: ${esc(e.message)}</div>`)); }
+  };
+  $('#ap-act', rc).onclick = () => traer(true);
+  if (AP.res[eid]) pintarRes(AP.res[eid]); else traer(false);
+
+  // 2) Fotos reales
+  const fotos = (S.biblioteca || []).filter((f) => f.empresaId === eid).slice().reverse();
+  const fc = el(`<div class="card"><h3>📷 Fotos reales</h3>
+    <div class="muted" style="margin:4px 0 10px">Sube fotos del celular: tienda, clientes (con su permiso), unboxing, producto en uso. El agente las usa primero en sus ideas.</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><input id="ap-prod" placeholder="Producto (ej. ThunderBass Max)" style="flex:1;min-width:160px">
+    <input id="ap-nota" placeholder="Nota (ej. cliente en tienda, prueba de sonido)" style="flex:2;min-width:180px"></div>
+    <input type="file" id="ap-file" accept="image/*" multiple hidden>
+    <button class="btn" id="ap-subir" style="margin-top:10px">⬆️ Subir fotos</button> <span class="muted" id="ap-sinfo"></span>
+    <div id="ap-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:12px"></div></div>`);
+  c.appendChild(fc);
+  const grid = $('#ap-grid', fc);
+  if (!fotos.length) grid.appendChild(el('<div class="muted">Aún no hay fotos de esta marca.</div>'));
+  fotos.forEach((f) => {
+    const t = el(`<div style="position:relative"><img src="${esc(f.url)}" alt="${esc(f.producto)}" loading="lazy" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px">
+      <div style="font-size:12px;line-height:1.25;margin-top:3px">${esc(f.producto || 'Sin producto')}${f.nota ? '<br><span class="muted">' + esc(f.nota) + '</span>' : ''}</div>
+      <button class="btn sec mini" aria-label="Quitar foto" style="position:absolute;top:4px;right:4px;padding:2px 8px">✕</button></div>`);
+    $('button', t).onclick = async () => {
+      if (!confirm('¿Quitar esta foto de la biblioteca? Las publicaciones que ya la usan no cambian.')) return;
+      try { await api('/api/biblioteca/' + f.id, { method: 'DELETE' }); toast('Foto quitada'); cargar(); } catch (e) { toast('⚠️ ' + e.message); }
+    };
+    grid.appendChild(t);
+  });
+  $('#ap-subir', fc).onclick = () => $('#ap-file', fc).click();
+  $('#ap-file', fc).onchange = async (ev) => {
+    const files = [...ev.target.files]; if (!files.length) return;
+    const producto = $('#ap-prod', fc).value.trim(), nota = $('#ap-nota', fc).value.trim();
+    let ok = 0;
+    for (const f of files) {
+      $('#ap-sinfo', fc).textContent = `Subiendo ${ok + 1} de ${files.length}…`;
+      try { await api('/api/biblioteca', { method: 'POST', body: JSON.stringify({ empresaId: eid, producto, nota, data: await achicarFoto(f) }) }); ok++; }
+      catch (e) { toast('⚠️ ' + f.name + ': ' + e.message); }
+    }
+    toast(ok + ' foto' + (ok === 1 ? '' : 's') + ' subida' + (ok === 1 ? '' : 's'));
+    $('#ap-prod', fc).value = ''; $('#ap-nota', fc).value = '';
+    cargar();
+  };
+
+  // 3) Dame ideas
+  const ic = el(`<div class="card"><h3>✦ Dame ideas</h3>
+    <div class="muted" style="margin:4px 0 10px">Propone publicaciones con lo que sí funcionó y tus fotos reales. Quedan como borradores en la Agenda: nada se publica sin tu OK.</div>
+    <select id="ap-n" style="max-width:120px">${[5, 6, 7, 8, 9, 10].map((n) => `<option ${n === 6 ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    <button class="magic press" id="ap-ideas" style="margin-top:10px">✦ Dame ideas</button><div id="ap-ires" style="margin-top:12px"></div></div>`);
+  c.appendChild(ic);
+  $('#ap-ideas', ic).onclick = async (ev) => {
+    const b = ev.currentTarget; b.disabled = true; b.textContent = 'Pensando…';
+    try {
+      const r = await api('/api/ideas', { method: 'POST', body: JSON.stringify({ empresaId: eid, cantidad: +$('#ap-n', ic).value }) });
+      toast(r.publicaciones.length + ' ideas guardadas como borrador');
+      await cargar();
+      const box = $('#ap-ires', $('#tab-aprende'));
+      if (box) {
+        box.appendChild(el(`<div class="muted" style="margin-bottom:6px">${r.conResultados ? 'Basadas en tus resultados reales.' : 'Aún no hay resultados medidos: son ideas de arranque.'} Revísalas en Agenda → Lista.</div>`));
+        r.publicaciones.forEach((p) => box.appendChild(el(`<div style="padding:8px 0;border-bottom:1px solid var(--sep,#8883)">
+          <div class="muted" style="font-size:13px">${p.plataforma === 'facebook' ? 'Facebook' : 'Instagram'} · ${esc(p.idea.formato)} · ${p.imagenUrl ? '📷 con foto real' : '📸 falta foto'}</div>
+          <div>${esc(p.texto.slice(0, 160))}</div><div class="muted" style="font-size:13px">💡 ${esc(p.idea.porque)}</div></div>`)));
+      }
+    } catch (e) { toast('⚠️ ' + e.message); }
+    finally { b.disabled = false; b.textContent = '✦ Dame ideas'; }
+  };
 }
 
 function descargarReporte(titulo, m) {

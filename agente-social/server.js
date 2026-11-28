@@ -18,6 +18,7 @@ const imagen = require('./imagen');
 const recordatorios = require('./recordatorios');
 const spots = require('./spots');
 const tienda = require('./tienda');
+const resultados = require('./resultados');
 
 const PORT = process.env.PORT || 4000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -205,6 +206,67 @@ async function manejarAPI(req, res, ruta) {
   // Estado general (todo lo que necesita el panel)
   if (recurso === 'estado' && req.method === 'GET') {
     return enviarJSON(res, 200, { ...estado, iaActiva: ia.hayClave, modelo: ia.MODELO, imagenActiva: imagen.hayImagen, datos: store.modo, datosMotivo: store.motivo });
+  }
+
+  // Resultados reales (Meta) de una marca: ranking de mejores y peores y por qué
+  if (recurso === 'resultados' && partes[2] && req.method === 'GET') {
+    const empresa = buscar('empresas', partes[2]);
+    if (!empresa) return enviarJSON(res, 404, { error: 'Empresa no encontrada' });
+    const forzar = new URL(req.url, 'http://x').searchParams.has('forzar');
+    const pubs = estado.publicaciones.filter((p) => p.empresaId === empresa.id);
+    return enviarJSON(res, 200, await resultados.resultadosEmpresa(empresa, pubs, forzar));
+  }
+
+  // Biblioteca de fotos reales por marca y producto (las sube el equipo desde el celular)
+  if (recurso === 'biblioteca') {
+    if (req.method === 'POST' && !partes[2]) {
+      const empresa = buscar('empresas', body.empresaId);
+      if (!empresa) return enviarJSON(res, 400, { error: 'Elige la marca' });
+      const m = String(body.data || '').match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
+      if (!m) return enviarJSON(res, 400, { error: 'Formato de imagen no valido (usa JPG, PNG o WEBP)' });
+      const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+      const buffer = Buffer.from(m[2], 'base64');
+      if (buffer.length > 10 * 1024 * 1024) return enviarJSON(res, 400, { error: 'La foto es muy grande (max 10 MB)' });
+      const foto = { id: id(), empresaId: empresa.id, producto: String(body.producto || '').trim().slice(0, 80), nota: String(body.nota || '').trim().slice(0, 140), creado: new Date().toISOString() };
+      foto.url = '/uploads/bib-' + foto.id + '.' + ext;
+      await store.guardarArchivo(foto.url, buffer, MIME['.' + ext]);
+      estado.biblioteca.push(foto);
+      guardar();
+      return enviarJSON(res, 201, foto);
+    }
+    if (req.method === 'DELETE' && partes[2]) {
+      const foto = buscar('biblioteca', partes[2]);
+      if (!foto) return enviarJSON(res, 404, { error: 'Foto no encontrada' });
+      // Las publicaciones que ya la usan se quedan con ella: solo sale de la biblioteca
+      estado.biblioteca = estado.biblioteca.filter((x) => x.id !== foto.id);
+      guardar();
+      return enviarJSON(res, 200, { ok: true });
+    }
+  }
+
+  // Dame ideas: 5 a 10 borradores basados en resultados reales y fotos reales. Nunca se publican solos.
+  if (recurso === 'ideas' && req.method === 'POST') {
+    const empresa = buscar('empresas', body.empresaId);
+    if (!empresa) return enviarJSON(res, 400, { error: 'Elige la marca' });
+    let resumen = null;
+    try { resumen = await resultados.resultadosEmpresa(empresa, estado.publicaciones.filter((p) => p.empresaId === empresa.id), false); } catch (e) { /* sin resultados: ideas de arranque */ }
+    const fotos = estado.biblioteca.filter((f) => f.empresaId === empresa.id).slice(-40);
+    try {
+      const ideas = await ia.generarIdeas({ empresa, resumen, fotos, cantidad: body.cantidad });
+      const creadas = ideas.map((idea) => {
+        const foto = idea.foto != null ? fotos[idea.foto] : null;
+        return {
+          id: id(), empresaId: empresa.id, plataforma: idea.plataforma, texto: idea.texto, hashtags: idea.hashtags,
+          imagenUrl: foto ? foto.url : '', imagenIA: false, estado: 'borrador', fechaProgramada: null,
+          idea: { formato: idea.formato, porque: idea.porque, fotoId: foto ? foto.id : null }, creado: new Date().toISOString(),
+        };
+      });
+      estado.publicaciones.push(...creadas);
+      guardar();
+      return enviarJSON(res, 201, { publicaciones: creadas, conResultados: !!(resumen && resumen.total) });
+    } catch (e) {
+      return enviarJSON(res, 500, { error: 'No se pudieron generar ideas: ' + e.message });
+    }
   }
 
   // Estado de conexion con Meta (Instagram + Facebook)

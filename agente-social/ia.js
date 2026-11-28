@@ -38,6 +38,15 @@ function parsearJSON(texto) {
   return null;
 }
 
+// La gente se aburre de lo que suena a IA: guía corta para que los textos suenen a la tienda de verdad
+const TONO_REAL =
+  `Escribe como el vendedor de la tienda que conoce el producto, no como un anuncio. Español de México natural, frases cortas y concretas. ` +
+  `PROHIBIDO: "eleva tu experiencia", "descubre", "sumérgete", "no te lo pierdas", "calidad premium", "revoluciona", "increíble", "el aliado perfecto", ` +
+  `más de 3 emojis, signos de exclamación en cada frase, listas de beneficios genéricas. ` +
+  `Habla de situaciones reales (la carne asada, el cumple, el gym, el trabajo, el camión), de lo que pregunta la gente en tienda y de pruebas reales (cómo suena, cuánto dura la batería). ` +
+  `Prefiere contenido real: foto de un cliente con su compra (solo con su permiso), la tienda, unboxing, prueba de sonido en video, comparación lado a lado. ` +
+  `NUNCA inventes reseñas, testimonios, clientes, cifras de ventas ni resultados.`;
+
 // --- Generar contenido para publicaciones ---
 async function generarContenido({ empresa, plataforma, tema, cantidad }) {
   const n = Math.min(Math.max(parseInt(cantidad, 10) || 3, 1), 6);
@@ -55,7 +64,8 @@ async function generarContenido({ empresa, plataforma, tema, cantidad }) {
     `LinkedIn mas profesional, web/blog mas extenso). ` +
     // sin la fecha el modelo pone el ano de su entrenamiento (#Navidad2024)
     `Hoy es ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'full' })}: si mencionas un ano o temporada, que sea la actual. ` +
-    `NO inventes precios, promociones, descuentos ni envios gratis: usa solo los que vengan en el tema.`;
+    `NO inventes precios, promociones, descuentos ni envios gratis: usa solo los que vengan en el tema. ` +
+    TONO_REAL;
 
   const user =
     `Genera ${n} publicaciones distintas sobre: "${tema || 'novedades y promociones del negocio'}".\n` +
@@ -81,6 +91,60 @@ async function generarContenido({ empresa, plataforma, tema, cantidad }) {
     hashtags: Array.isArray(p.hashtags) ? p.hashtags : [],
     imagenPrompt: String(p.imagenPrompt || '').trim(),
   }));
+}
+
+// --- Ideas de publicaciones a partir de resultados reales y fotos reales ---
+// resumen: salida de resultados.analizar (o null); fotos: [{producto, nota}] de la biblioteca
+async function generarIdeas({ empresa, resumen, fotos, cantidad }) {
+  const n = Math.min(Math.max(parseInt(cantidad, 10) || 6, 5), 10);
+  const listaFotos = (fotos || []).map((f, i) => `${i}: ${f.producto || 'sin producto'}${f.nota ? ' — ' + f.nota : ''}`).join('\n') || '(no hay fotos reales todavía)';
+  const datos = resumen && resumen.total
+    ? `Resultados reales de las últimas ${resumen.total} publicaciones (medido por ${resumen.base === 'tasa' ? 'interacciones entre alcance' : 'interacciones'}):\n` +
+      `Conclusiones: ${resumen.conclusiones.join(' ')}\n` +
+      `Por formato: ${resumen.porTipo.map((x) => `${x.clave} (${x.n})`).join(', ')}. Mejor horario: ${(resumen.porFranja[0] || {}).clave || '—'}.\n` +
+      `Las que mejor funcionaron: ${resumen.mejores.map((m) => `[${m.red} ${m.tipo}] ${m.texto.slice(0, 80)}`).join(' | ')}\n` +
+      `Las que peor: ${resumen.peores.map((m) => `[${m.red} ${m.tipo}] ${m.texto.slice(0, 80)}`).join(' | ')}`
+    : 'Todavía no hay resultados medidos: propón una mezcla variada para empezar a aprender.';
+
+  if (!hayClave) {
+    return Array.from({ length: n }, (_, i) => ({
+      plataforma: i % 2 ? 'facebook' : 'instagram', formato: ['foto', 'reel', 'carrusel', 'historia'][i % 4],
+      texto: `[DEMO] Idea ${i + 1} para ${empresa.nombre}. (Configura ANTHROPIC_API_KEY para ideas reales.)`,
+      hashtags: [], foto: fotos && fotos.length ? i % fotos.length : null, porque: 'Modo demo',
+    }));
+  }
+
+  const system =
+    `Eres el estratega de redes de "${empresa.nombre}" (rubro: ${empresa.rubro || 'general'}; público: ${empresa.publico || 'clientes locales'}). ` +
+    `Propones publicaciones basadas en datos reales y fotos reales del negocio. ` +
+    `Hoy es ${new Date().toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'full' })}. ` +
+    `NO inventes precios, promociones, descuentos ni envíos gratis. ` + TONO_REAL;
+  const user =
+    `${datos}\n\nFotos reales disponibles (número: producto — nota):\n${listaFotos}\n\n` +
+    `Propón ${n} publicaciones distintas para Instagram y Facebook. Usa primero las fotos reales (pon su número en "foto"); ` +
+    `si ninguna sirve, pon null y di en "porque" qué foto o video real conviene tomar (ej. prueba de sonido, unboxing, cliente en tienda). ` +
+    `Aprovecha lo que funcionó y evita lo que no. En "porque" explica en una frase por qué, citando el dato real si existe.\n` +
+    `Devuelve UNICAMENTE un array JSON. Cada elemento: {"plataforma": "instagram" | "facebook", "formato": "foto" | "carrusel" | "reel" | "historia", ` +
+    `"texto": "texto listo para publicar", "hashtags": ["#uno"], "foto": número o null, "porque": "una frase"}`;
+
+  const resp = await client.messages.create({
+    model: MODELO,
+    max_tokens: 6000,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'medium' },
+    system,
+    messages: [{ role: 'user', content: user }],
+  });
+  const parsed = parsearJSON(textoDe(resp));
+  if (!Array.isArray(parsed)) throw new Error('La IA no devolvió ideas válidas, intenta otra vez.');
+  return parsed.slice(0, n).map((p) => ({
+    plataforma: p.plataforma === 'facebook' ? 'facebook' : 'instagram',
+    formato: ['foto', 'carrusel', 'reel', 'historia'].includes(p.formato) ? p.formato : 'foto',
+    texto: String(p.texto || '').trim(),
+    hashtags: Array.isArray(p.hashtags) ? p.hashtags.filter((h) => typeof h === 'string').slice(0, 30) : [],
+    foto: Number.isInteger(p.foto) && fotos && p.foto >= 0 && p.foto < fotos.length ? p.foto : null,
+    porque: String(p.porque || '').trim().slice(0, 300),
+  })).filter((p) => p.texto);
 }
 
 // --- Redactar respuesta a un cliente ---
@@ -213,4 +277,4 @@ function demoGuion(empresa, idea, bocina, n, dialogo) {
   };
 }
 
-module.exports = { generarContenido, redactarRespuesta, escribirGuionSpot, hayClave, MODELO };
+module.exports = { generarContenido, generarIdeas, redactarRespuesta, escribirGuionSpot, hayClave, MODELO };
